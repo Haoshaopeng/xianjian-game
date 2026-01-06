@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICM Workbench v13.16 (交互增强版)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- PDF.js Core & Worker -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+    
+    <!-- html2canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- Marked & MathJax -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <style>
+        :root {
+            /* Colors */
+            --bg-dark: #1e1e1e;
+            --sidebar-bg: #252526;
+            --border-color: #333;
+            --accent: #6366f1;
+            --note-bg: #2d2d30;
+            --chat-user: #2b313b;
+            --chat-ai: #2d2d30;
+            
+            /* Dimensions */
+            --note-width: 320px;
+            --sidebar-width: 280px;
+
+            /* User Customizable Typography Defaults */
+            --content-size: 14px;
+            --content-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            --line-height: 1.6;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #ccc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            user-select: none;
+        }
+        
+        .selectable-text { user-select: text; }
+        
+        /* Cursor Modes */
+        .cursor-grab { cursor: grab !important; }
+        .cursor-grabbing { cursor: grabbing !important; }
+
+        /* --- Sidebar --- */
+        .sidebar {
+            width: var(--sidebar-width); 
+            background: var(--sidebar-bg); 
+            border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column; flex-shrink: 0; z-index: 40;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        
+        .sidebar.collapsed {
+            width: 0;
+            border-right: none;
+            opacity: 0;
+        }
+
+        /* Sidebar Tabs */
+        .sidebar-tabs {
+            display: flex;
+            background: #1e1e1e;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .sidebar-tab {
+            flex: 1; text-align: center; padding: 10px 0; font-size: 13px; cursor: pointer; color: #888;
+            border-bottom: 2px solid transparent; transition: all 0.2s;
+        }
+        .sidebar-tab:hover { color: #ccc; background: #2a2a2a; }
+        .sidebar-tab.active { color: white; font-weight: bold; border-bottom-color: var(--accent); background: #252526; }
+
+        /* Tab Content Areas */
+        .tab-content { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+        .tab-content.active { display: flex; }
+        
+        .folder-section {
+            flex: 0 0 40%; 
+            border-bottom: 1px solid var(--border-color);
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .file-section {
+            flex: 1;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Outline Styles */
+        .outline-tree { flex: 1; overflow-y: auto; padding: 10px 0; }
+        .outline-item {
+            padding: 6px 12px; cursor: pointer; color: #aaa; font-size: 13px;
+            display: flex; align-items: center; width: 100%;
+            transition: background 0.2s;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            border-left: 2px solid transparent;
+        }
+        .outline-item:hover { background: #333; color: white; }
+        .outline-item.scanned { color: #93c5fd; } 
+        .outline-item span { overflow: hidden; text-overflow: ellipsis; }
+
+        .sidebar-header {
+            padding: 10px 12px; font-size: 12px; font-weight: bold; color: #888; text-transform: uppercase;
+            display: flex; justify-content: space-between; align-items: center; background: #2d2d2d;
+        }
+
+        .list-item {
+            padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #aaa;
+            border-left: 3px solid transparent; transition: background 0.2s;
+        }
+        .list-item:hover { background: #2d2d2d; }
+        .list-item.active { background: #37373d; border-left-color: var(--accent); color: #fff; font-weight: 500; }
+
+        /* --- Analysis Modal --- */
+        .analysis-modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 5000;
+            display: none; justify-content: center; align-items: center;
+        }
+        .analysis-content {
+            width: 900px; max-width: 95%; height: 85vh; background: #1e1e1e;
+            border: 1px solid #454545; border-radius: 12px; display: flex; flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+        .analysis-body {
+            flex: 1; overflow-y: auto; padding: 40px; 
+            color: #ddd;
+            font-size: var(--content-size);
+            font-family: var(--content-font);
+            line-height: var(--line-height);
+        }
+        .analysis-body h1, .analysis-body h2, .analysis-body h3 { color: white; margin-top: 1.5em; margin-bottom: 0.8em; font-weight: bold; }
+        .analysis-body h1 { font-size: 1.8em; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .analysis-body h2 { font-size: 1.4em; }
+        .analysis-body ul, .analysis-body ol { padding-left: 20px; margin-bottom: 1em; }
+        .analysis-body ul { list-style: disc; }
+        .analysis-body table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+        .analysis-body th, .analysis-body td { border: 1px solid #444; padding: 10px; text-align: left; }
+        .analysis-body th { background: #333; }
+        .analysis-body blockquote { border-left: 4px solid var(--accent); padding-left: 15px; color: #aaa; margin: 1em 0; background: #252526; padding: 10px; }
+
+        /* --- Main Area --- */
+        .main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #525659; position: relative; }
+        .pdf-toolbar { height: 40px; background: #2d2d2d; border-bottom: 1px solid #111; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10; }
+        .pdf-scroller { flex: 1; overflow-y: auto; overflow-x: auto; padding: 40px; display: block; text-align: center; }
+        .page-wrapper { display: inline-flex; margin-bottom: 40px; position: relative; text-align: left; vertical-align: top; transition: background 0.3s; }
+        
+        @keyframes pageHighlight {
+            0% { box-shadow: 0 0 0 2px var(--accent); }
+            50% { box-shadow: 0 0 0 6px var(--accent); }
+            100% { box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+        }
+        .page-wrapper.highlight-jump .pdf-page-container {
+            animation: pageHighlight 1s ease-out;
+        }
+
+        .pdf-page-container { position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.4); background: white; flex-shrink: 0; }
+        .pdf-canvas { display: block; }
+        .textLayer { position: absolute; inset: 0; overflow: hidden; opacity: 0.2; line-height: 1.0; transform-origin: 0 0; }
+        .textLayer ::selection { background: rgba(99, 102, 241, 0.4); }
+        .textLayer > span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+        
+        .margin-column { width: var(--note-width); flex-shrink: 0; position: relative; margin-left: 20px; }
+        .note-card { position: absolute; width: 100%; background: var(--note-bg); border: 1px solid #454545; border-left: 3px solid var(--accent); border-radius: 6px; padding: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideInLeft 0.3s ease-out; transition: top 0.3s ease; z-index: 10; }
+        .note-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-color: #666; z-index: 20; }
+        .note-close { position: absolute; top: 4px; right: 4px; cursor: pointer; color: #666; font-size: 14px; }
+        .note-content { font-size: var(--content-size); font-family: var(--content-font); line-height: var(--line-height); color: #e0e0e0; }
+
+        /* --- Agent Window --- */
+        .ai-float-window { position: fixed; bottom: 90px; right: 30px; width: 400px; height: 550px; background: #1e1e1e; border: 1px solid #454545; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); display: flex; flex-direction: column; z-index: 100; transition: opacity 0.2s, transform 0.2s; opacity: 0; pointer-events: none; transform: translateY(20px); }
+        .ai-float-window.active { opacity: 1; pointer-events: auto; transform: translateY(0); }
+        .ai-header { height: 40px; background: #252526; border-bottom: 1px solid #333; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-radius: 12px 12px 0 0; cursor: move; user-select: none; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+        .chat-msg { max-width: 90%; padding: 10px 14px; border-radius: 8px; word-wrap: break-word; }
+        .chat-msg.user { align-self: flex-end; background: var(--chat-user); }
+        .chat-msg.ai { align-self: flex-start; background: var(--chat-ai); border: 1px solid #333; }
+        
+        .md-content { font-size: var(--content-size); font-family: var(--content-font); line-height: var(--line-height); }
+        .md-content p { margin-bottom: 0.5em; }
+        .md-content pre { background: #111; padding: 8px; border-radius: 4px; overflow-x: auto; margin: 5px 0; }
+        .md-content code { background: #333; padding: 2px 4px; border-radius: 3px; color: #f472b6; font-family: monospace; font-size: 0.9em; }
+
+        .chat-input-area { padding: 10px; background: #252526; border-top: 1px solid #333; border-radius: 0 0 12px 12px; }
+        .chat-textarea { width: 100%; background: #181818; border: 1px solid #333; color: #eee; padding: 8px; border-radius: 6px; font-size: 13px; resize: none; height: 50px; outline: none; }
+        .chat-textarea:focus { border-color: var(--accent); }
+        
+        .fab-btn { position: fixed; bottom: 30px; right: 30px; width: 50px; height: 50px; border-radius: 25px; background: var(--accent); color: white; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; z-index: 101; transition: transform 0.2s; }
+        .fab-btn:hover { transform: scale(1.1); }
+        
+        #selectionToolbar { position: fixed; z-index: 2000; background: #333; padding: 4px; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid #555; display: none; gap: 6px; }
+        #screenshotLayer { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; cursor: crosshair; display: none; background: rgba(0,0,0,0.1); }
+        #selectionRect { position: absolute; border: 2px solid var(--accent); background: rgba(99, 102, 241, 0.1); pointer-events: none; display: none; }
+        
+        .btn-icon { padding: 6px; border-radius: 4px; cursor: pointer; color: #aaa; display: flex; justify-content: center; align-items: center; width: 32px; height: 32px; transition: all 0.2s; }
+        .btn-icon:hover { background: #444; color: #fff; }
+        .btn-icon.active { background: var(--accent); color: white; }
+        .btn-primary { background: var(--accent); color: white; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; justify-content: center;}
+        
+        /* --- Settings Modal --- */
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 3000; display: none; justify-content: center; align-items: center; }
+        .modal-box { background: #252526; width: 450px; padding: 24px; border-radius: 8px; border: 1px solid #454545; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .input-group { margin-bottom: 15px; }
+        .input-label { display: block; color: #aaa; font-size: 12px; margin-bottom: 5px; }
+        .input-field { width: 100%; background: #1e1e1e; border: 1px solid #3f3f3f; color: white; padding: 8px; border-radius: 4px; font-size: 13px; }
+        .input-field:focus { border-color: var(--accent); outline: none; }
+        .select-field { width: 100%; background: #1e1e1e; border: 1px solid #3f3f3f; color: white; padding: 8px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+        
+        .screenshot-preview-box { display: none; position: relative; margin-bottom: 5px; }
+        .screenshot-thumb { height: 50px; border: 1px solid var(--accent); border-radius: 4px; }
+        .screenshot-close { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border-radius: 50%; width: 14px; height: 14px; font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        
+        .loading-dots::after { content: ' .'; animation: dots 1s steps(5, end) infinite; }
+        @keyframes dots { 0%, 20% { content: ' .'; } 40% { content: ' ..'; } 60% { content: ' ...'; } 80%, 100% { content: ''; } }
+        @keyframes slideInLeft { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #424242; border-radius: 4px; }
+    </style>
+</head>
+<body class="selectable-text">
+
+    <!-- Screenshot Layer -->
+    <div id="screenshotLayer"><div id="selectionRect"></div></div>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="mainSidebar">
+        <!-- Sidebar Tabs -->
+        <div class="sidebar-tabs">
+            <div class="sidebar-tab active" onclick="switchSidebarTab('files')" id="tab-btn-files">资源</div>
+            <div class="sidebar-tab" onclick="switchSidebarTab('outline')" id="tab-btn-outline">大纲</div>
+        </div>
+
+        <!-- Tab 1: Files & Folders -->
+        <div class="tab-content active" id="tab-files">
+            <!-- Folders -->
+            <div class="folder-section">
+                <div class="sidebar-header">
+                    <span>文件夹</span>
+                    <button class="btn-icon text-xs" onclick="createFolder()" title="新建文件夹"><i class="ph-bold ph-plus"></i></button>
+                </div>
+                <div id="folderList" class="flex-1 overflow-y-auto p-1"></div>
+            </div>
+
+            <!-- Files -->
+            <div class="file-section">
+                <div class="sidebar-header bg-gray-800 border-t border-gray-700">
+                    <span>文件列表</span>
+                    <div class="flex gap-2">
+                        <button class="btn-icon text-xs" onclick="openSettings()" title="设置"><i class="ph-bold ph-gear"></i></button>
+                    </div>
+                </div>
+                
+                <div class="p-2 border-b border-gray-700 bg-gray-800" id="analysisBar" style="display:none;">
+                    <button onclick="analyzeCurrentFolder()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-1.5 rounded flex items-center justify-center gap-2">
+                        <i class="ph-bold ph-strategy"></i> 多文档交叉分析
+                    </button>
+                </div>
+
+                <div id="fileList" class="flex-1 overflow-y-auto p-1"></div>
+                
+                <div class="p-3 border-t border-color bg-sidebar-bg">
+                    <input type="file" id="fileInput" hidden multiple accept=".pdf" onchange="handleFileSelect(event)">
+                    <button onclick="document.getElementById('fileInput').click()" class="btn-primary w-full">
+                        <i class="ph-bold ph-plus"></i> 导入PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Outline -->
+        <div class="tab-content" id="tab-outline">
+            <div class="sidebar-header">
+                <span>文档目录</span>
+                <button class="btn-icon text-xs" onclick="refreshOutline()" title="刷新"><i class="ph-bold ph-arrows-clockwise"></i></button>
+            </div>
+            <div id="outlineTree" class="outline-tree">
+                <div class="flex flex-col items-center justify-center h-40 text-gray-500 text-xs gap-2 p-4 text-center">
+                    <i class="ph-duotone ph-list-dashes text-3xl opacity-50"></i>
+                    <p>加载 PDF 以显示大纲<br>支持点击跳转</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+        <div class="pdf-toolbar">
+            <div class="flex items-center gap-2" style="min-width: 0;">
+                <button class="btn-icon" id="sidebarToggleBtn" onclick="toggleSidebar()" title="折叠/展开侧边栏">
+                    <i class="ph-bold ph-sidebar-simple"></i>
+                </button>
+                <div class="h-4 w-px bg-gray-700 mx-1"></div>
+                <button class="btn-icon" id="handToolBtn" onclick="toggleHandMode()" title="切换手型/选择模式">
+                    <i class="ph-bold ph-hand-palm"></i>
+                </button>
+                <div class="text-xs text-gray-400 truncate max-w-[200px] ml-2" id="fileStatus">未选择文件</div>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button class="btn-icon" onclick="changeZoom(-0.2)"><i class="ph-bold ph-minus"></i></button>
+                <span class="text-xs text-gray-300 w-12 text-center" id="zoomLevel">100%</span>
+                <button class="btn-icon" onclick="changeZoom(0.2)"><i class="ph-bold ph-plus"></i></button>
+            </div>
+        </div>
+
+        <div class="pdf-scroller" id="pdfScroller">
+            <div id="emptyState" class="w-full h-full flex flex-col items-center justify-center text-gray-500">
+                <i class="ph-duotone ph-folder-open text-6xl mb-4 opacity-50"></i>
+                <p class="mt-2">请选择文件夹并导入 PDF 文档</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis Modal -->
+    <div class="analysis-modal" id="analysisModal">
+        <div class="analysis-content">
+            <div class="h-12 border-b border-gray-600 flex items-center justify-between px-4 bg-gray-800 rounded-t-lg flex-shrink-0">
+                <span class="font-bold text-white flex items-center gap-2">
+                    <i class="ph-bold ph-strategy text-indigo-400"></i> 交叉分析报告
+                </span>
+                <button onclick="closeAnalysis()" class="text-gray-400 hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
+            </div>
+            <div class="analysis-body" id="analysisResult">
+                <div class="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
+                    <i class="ph-bold ph-spinner animate-spin text-4xl text-indigo-500"></i>
+                    <p>正在分析文献...</p>
+                </div>
+            </div>
+            <div class="p-3 border-t border-gray-700 bg-gray-800 flex justify-end flex-shrink-0 rounded-b-lg">
+                <button onclick="closeAnalysis()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Agent Window -->
+    <div class="fab-btn" onclick="toggleAI()" title="AI 助手">
+        <i class="ph-bold ph-robot"></i>
+    </div>
+    <div class="ai-float-window" id="aiWindow">
+        <div class="ai-header" id="aiHeader">
+            <div class="flex items-center gap-2 font-bold text-sm text-white">
+                <i class="ph-bold ph-sparkle text-indigo-400"></i> AI 助手
+            </div>
+            <div class="flex gap-2">
+                <!-- 添加 stopPropagation 防止拖拽干扰点击 -->
+                <i class="ph-bold ph-gear cursor-pointer text-gray-400 hover:text-white" onclick="openSettings(); event.stopPropagation();" title="设置"></i>
+                <i class="ph-bold ph-x cursor-pointer text-gray-400 hover:text-white" onclick="toggleAI(); event.stopPropagation();" title="关闭"></i>
+            </div>
+        </div>
+        <div class="ai-body" style="display:flex; flex-direction:column; height: calc(100% - 40px);">
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-msg ai">
+                    <div class="md-content">您好！我是您的学术助手。请先在设置中配置 API。</div>
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <div class="screenshot-preview-box" id="screenshotPreviewBox">
+                    <img id="screenshotThumb" class="screenshot-thumb">
+                    <div class="screenshot-close" onclick="clearScreenshot()">×</div>
+                </div>
+                <div class="flex gap-2 mb-2">
+                    <button class="px-2 py-1 bg-gray-700 rounded text-xs hover:bg-gray-600 text-gray-300 flex items-center gap-1" onclick="startScreenshotMode()">
+                        <i class="ph-bold ph-camera"></i> 截图
+                    </button>
+                    <button class="px-2 py-1 bg-gray-700 rounded text-xs hover:bg-gray-600 text-gray-300" onclick="clearChat()">
+                        <i class="ph-bold ph-trash"></i> 清空
+                    </button>
+                </div>
+                <div class="relative">
+                    <textarea id="chatInput" class="chat-textarea" placeholder="请输入问题..." onkeydown="if(event.ctrlKey && event.key==='Enter') sendMessage()"></textarea>
+                    <button onclick="sendMessage()" class="absolute bottom-2 right-2 text-indigo-400 hover:text-indigo-300"><i class="ph-fill ph-paper-plane-right text-xl"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Selection Toolbar -->
+    <div id="selectionToolbar">
+        <button class="btn-icon text-indigo-400 hover:bg-indigo-900" onclick="createMarginNote('translate')" title="翻译">
+            <i class="ph-bold ph-translate"></i>
+        </button>
+        <button class="btn-icon text-pink-400 hover:bg-pink-900" onclick="createMarginNote('explain')" title="解释">
+            <i class="ph-bold ph-brain"></i>
+        </button>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-box">
+            <h3 class="font-bold text-white mb-4 text-lg border-b border-gray-700 pb-2">设置</h3>
+            <div class="input-group">
+                <label class="input-label">API 地址 (Base URL)</label>
+                <input type="text" id="apiEndpoint" class="input-field" placeholder="https://api.deepseek.com">
+                <p class="text-xs text-gray-500 mt-1">默认: https://api.deepseek.com</p>
+            </div>
+            <div class="input-group">
+                <label class="input-label">API 密钥 (API Key)</label>
+                <input type="password" id="apiKey" class="input-field" placeholder="sk-...">
+            </div>
+            <hr class="border-gray-700 my-4">
+            <div class="flex gap-4">
+                <div class="input-group flex-1">
+                    <label class="input-label">输出字体大小</label>
+                    <select id="fontSizeSelect" class="select-field">
+                        <option value="12">小 (12px)</option>
+                        <option value="14" selected>标准 (14px)</option>
+                        <option value="16">大 (16px)</option>
+                        <option value="18">特大 (18px)</option>
+                    </select>
+                </div>
+                <div class="input-group flex-1">
+                    <label class="input-label">输出字体样式</label>
+                    <select id="fontStyleSelect" class="select-field">
+                        <option value="sans">无衬线 (现代)</option>
+                        <option value="serif">衬线 (学术)</option>
+                        <option value="mono">等宽 (代码)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button class="px-4 py-2 text-gray-400 text-sm hover:text-white" onclick="closeSettings()">取消</button>
+                <button class="btn-primary" onclick="saveSettings()">保存并应用</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global State ---
+        let pdfDoc = null;
+        let pdfLoadingTask = null;
+        let scale = 1.0;
+        let currentFileId = null;
+        let currentFolderId = 'default';
+        
+        let folders = { 'default': { id: 'default', name: '默认项目', created: Date.now() } };
+        let files = {}; 
+        
+        let currentScreenshot = null;
+        let chatHistory = [{ role: "system", content: "你是我的学术研究助手。请用中文回答所有问题。" }];
+        
+        let appConfig = {
+            key: '',
+            baseUrl: 'https://api.deepseek.com',
+            model: 'deepseek-chat',
+            fontSize: '14',
+            fontStyle: 'sans'
+        };
+
+        // --- Init ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings(); 
+            updateZoomDisplay();
+            makeDraggable(document.getElementById('aiWindow'), document.getElementById('aiHeader'));
+            document.addEventListener('mouseup', checkSelection);
+            
+            const layer = document.getElementById('screenshotLayer');
+            layer.addEventListener('mousedown', onScreenshotMouseDown);
+            layer.addEventListener('mousemove', onScreenshotMouseMove);
+            layer.addEventListener('mouseup', onScreenshotMouseUp);
+
+            renderFolderList();
+            renderFileList();
+            
+            if(!appConfig.key) setTimeout(openSettings, 500);
+        });
+
+        // --- Hand Tool Logic ---
+        let isHandMode = false;
+        let pos = { top: 0, left: 0, x: 0, y: 0 };
+
+        function toggleHandMode() {
+            isHandMode = !isHandMode;
+            const btn = document.getElementById('handToolBtn');
+            const scroller = document.getElementById('pdfScroller');
+            
+            if (isHandMode) {
+                btn.classList.add('active'); // 需要在 CSS 定义 active 样式
+                scroller.classList.add('cursor-grab');
+                document.body.classList.remove('selectable-text'); // 禁用全局选区以优化体验
+                // 添加拖拽监听
+                scroller.addEventListener('mousedown', mouseDownHandler);
+            } else {
+                btn.classList.remove('active');
+                scroller.classList.remove('cursor-grab', 'cursor-grabbing');
+                document.body.classList.add('selectable-text');
+                // 移除拖拽监听
+                scroller.removeEventListener('mousedown', mouseDownHandler);
+            }
+        }
+
+        const mouseDownHandler = function(e) {
+            if (!isHandMode) return;
+            const scroller = document.getElementById('pdfScroller');
+            scroller.classList.add('cursor-grabbing');
+            scroller.classList.remove('cursor-grab');
+
+            pos = {
+                left: scroller.scrollLeft,
+                top: scroller.scrollTop,
+                x: e.clientX,
+                y: e.clientY,
+            };
+
+            document.addEventListener('mousemove', mouseMoveHandler);
+            document.addEventListener('mouseup', mouseUpHandler);
+        };
+
+        const mouseMoveHandler = function(e) {
+            const scroller = document.getElementById('pdfScroller');
+            const dx = e.clientX - pos.x;
+            const dy = e.clientY - pos.y;
+
+            scroller.scrollTop = pos.top - dy;
+            scroller.scrollLeft = pos.left - dx;
+        };
+
+        const mouseUpHandler = function() {
+            const scroller = document.getElementById('pdfScroller');
+            scroller.classList.add('cursor-grab');
+            scroller.classList.remove('cursor-grabbing');
+            
+            document.removeEventListener('mousemove', mouseMoveHandler);
+            document.removeEventListener('mouseup', mouseUpHandler);
+        };
+
+        // --- Sidebar Logic ---
+        function toggleSidebar() {
+            const sidebar = document.getElementById('mainSidebar');
+            const btn = document.getElementById('sidebarToggleBtn');
+            sidebar.classList.toggle('collapsed');
+            
+            if (sidebar.classList.contains('collapsed')) {
+                btn.classList.add('active'); 
+                btn.title = "展开侧边栏";
+            } else {
+                btn.classList.remove('active');
+                btn.title = "折叠侧边栏";
+            }
+        }
+
+        function switchSidebarTab(tabName) {
+            document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-btn-' + tabName).classList.add('active');
+            
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        // --- Outline (TOC) Logic ---
+        async function loadOutline() {
+            if (!pdfDoc) return;
+            const tree = document.getElementById('outlineTree');
+            tree.innerHTML = '<div class="flex items-center justify-center p-4 text-gray-500 text-xs"><i class="ph-bold ph-spinner animate-spin mr-2"></i>加载大纲...</div>';
+            
+            try {
+                // 1. Try Standard Outline
+                const outline = await pdfDoc.getOutline();
+                if (outline && outline.length > 0) {
+                    tree.innerHTML = '';
+                    await renderOutlineItems(outline, tree, 0);
+                    return;
+                }
+                
+                // 2. Fallback: Smart Heuristic Scan
+                tree.innerHTML = '<div class="flex flex-col items-center justify-center p-4 text-gray-500 text-xs text-center"><i class="ph-bold ph-scan text-xl mb-1 text-indigo-400"></i><p>无内置书签</p><p>正在智能扫描目录结构...</p></div>';
+                
+                setTimeout(async () => {
+                    const scanned = await scanPdfHeaders();
+                    if (scanned && scanned.length > 0) {
+                        tree.innerHTML = '<div class="text-xs text-gray-600 p-2 border-b border-gray-700 bg-gray-900">智能识别结果</div>';
+                        const ul = document.createElement('div');
+                        scanned.forEach(item => {
+                            const div = document.createElement('div');
+                            div.className = 'outline-item scanned';
+                            div.style.paddingLeft = '12px';
+                            div.innerHTML = `<i class="ph-fill ph-caret-right text-xs mr-2 invisible"></i><span title="${item.title}">${item.title}</span><span class="ml-auto text-xs text-gray-600">${item.page}</span>`;
+                            div.onclick = () => renderPage(item.page).then(() => {
+                                const wrapper = document.getElementById(`page-wrapper-${item.page}`);
+                                if(wrapper) {
+                                    wrapper.scrollIntoView({behavior:'smooth', block:'start'});
+                                    wrapper.classList.remove('highlight-jump');
+                                    void wrapper.offsetWidth;
+                                    wrapper.classList.add('highlight-jump');
+                                }
+                            });
+                            ul.appendChild(div);
+                        });
+                        tree.appendChild(ul);
+                    } else {
+                        tree.innerHTML = `<div class="flex flex-col items-center justify-center h-40 text-gray-500 text-xs gap-2 text-center"><i class="ph-bold ph-warning-circle text-2xl opacity-50"></i><p>未检测到有效大纲</p></div>`;
+                    }
+                }, 100);
+
+            } catch (e) {
+                console.error("Outline Error", e);
+                tree.innerHTML = '<div class="p-4 text-xs text-red-400">大纲加载失败</div>';
+            }
+        }
+
+        async function scanPdfHeaders() {
+            if(!pdfDoc) return [];
+            const results = [];
+            const numPages = Math.min(pdfDoc.numPages, 50); 
+            
+            let fontSizes = {};
+            for(let i=1; i<=Math.min(3, numPages); i++) {
+                const p = await pdfDoc.getPage(i);
+                const txt = await p.getTextContent();
+                txt.items.forEach(item => {
+                    const h = Math.round(item.transform[3]); 
+                    if(h > 0) fontSizes[h] = (fontSizes[h] || 0) + item.str.length;
+                });
+            }
+            
+            let bodySize = 0, maxCount = 0;
+            for(let size in fontSizes) {
+                if(fontSizes[size] > maxCount) { maxCount = fontSizes[size]; bodySize = parseInt(size); }
+            }
+            
+            for(let i=1; i<=numPages; i++) {
+                const p = await pdfDoc.getPage(i);
+                const txt = await p.getTextContent();
+                
+                let lines = {};
+                txt.items.forEach(item => {
+                    if(!item.str.trim()) return;
+                    const h = Math.round(item.transform[3]);
+                    const y = Math.round(item.transform[5]); 
+                    
+                    if (h > bodySize + 1) {
+                        if(!lines[y]) lines[y] = [];
+                        lines[y].push(item.str);
+                    }
+                });
+                
+                Object.keys(lines).sort((a,b) => b - a).forEach(y => {
+                    const text = lines[y].join(' ').trim();
+                    if(text.length > 2 && text.length < 100 && !/^\d+$/.test(text)) {
+                        results.push({ title: text, page: i });
+                    }
+                });
+            }
+            return results;
+        }
+
+        async function renderOutlineItems(items, container, level) {
+            for (const item of items) {
+                const div = document.createElement('div');
+                div.className = 'outline-item';
+                div.style.paddingLeft = (12 + level * 14) + 'px'; 
+                div.innerHTML = `
+                    <i class="ph-fill ph-caret-right text-xs mr-2 ${item.items && item.items.length ? 'text-gray-500' : 'invisible'}"></i>
+                    <span title="${item.title}">${item.title}</span>
+                `;
+                
+                div.onclick = async (e) => {
+                    e.stopPropagation();
+                    if (item.dest) {
+                        await navigateToDestination(item.dest);
+                    }
+                };
+                
+                container.appendChild(div);
+
+                if (item.items && item.items.length > 0) {
+                    await renderOutlineItems(item.items, container, level + 1);
+                }
+            }
+        }
+
+        async function navigateToDestination(dest) {
+            try {
+                let explicitDest = dest;
+                if (typeof dest === 'string') {
+                    explicitDest = await pdfDoc.getDestination(dest);
+                }
+                
+                if (!explicitDest) return;
+
+                const destRef = explicitDest[0];
+                let pageIndex = 0;
+                
+                if (typeof destRef === 'object' && destRef !== null) {
+                    pageIndex = await pdfDoc.getPageIndex(destRef);
+                } else if (typeof destRef === 'number') {
+                    pageIndex = destRef; 
+                }
+
+                const pageNum = pageIndex + 1;
+
+                renderPage(pageNum).then(() => {
+                    const wrapper = document.getElementById(`page-wrapper-${pageNum}`);
+                    if (wrapper) {
+                        wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        wrapper.classList.remove('highlight-jump');
+                        void wrapper.offsetWidth; 
+                        wrapper.classList.add('highlight-jump');
+                    }
+                });
+            } catch (e) {
+                console.error("Navigation failed", e);
+            }
+        }
+        
+        function refreshOutline() { loadOutline(); }
+
+        // --- Settings Logic ---
+        function loadSettings() {
+            appConfig.key = localStorage.getItem('icm_api_key') || '';
+            appConfig.baseUrl = localStorage.getItem('icm_api_base') || 'https://api.deepseek.com';
+            appConfig.fontSize = localStorage.getItem('icm_font_size') || '14';
+            appConfig.fontStyle = localStorage.getItem('icm_font_style') || 'sans';
+            applyAppearance();
+        }
+
+        function saveSettings() {
+            appConfig.key = document.getElementById('apiKey').value;
+            appConfig.baseUrl = document.getElementById('apiEndpoint').value;
+            appConfig.fontSize = document.getElementById('fontSizeSelect').value;
+            appConfig.fontStyle = document.getElementById('fontStyleSelect').value;
+            localStorage.setItem('icm_api_key', appConfig.key);
+            localStorage.setItem('icm_api_base', appConfig.baseUrl);
+            localStorage.setItem('icm_font_size', appConfig.fontSize);
+            localStorage.setItem('icm_font_style', appConfig.fontStyle);
+            applyAppearance();
+            closeSettings();
+        }
+
+        function applyAppearance() {
+            const root = document.documentElement;
+            root.style.setProperty('--content-size', `${appConfig.fontSize}px`);
+            let fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif';
+            if (appConfig.fontStyle === 'serif') fontFamily = '"Merriweather", "Georgia", "Songti SC", "SimSun", serif';
+            else if (appConfig.fontStyle === 'mono') fontFamily = '"Fira Code", "Courier New", monospace';
+            root.style.setProperty('--content-font', fontFamily);
+        }
+
+        function openSettings() {
+            document.getElementById('apiKey').value = appConfig.key;
+            document.getElementById('apiEndpoint').value = appConfig.baseUrl;
+            document.getElementById('fontSizeSelect').value = appConfig.fontSize;
+            document.getElementById('fontStyleSelect').value = appConfig.fontStyle;
+            document.getElementById('settingsModal').style.display = 'flex';
+        }
+        function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
+
+        // --- Folder Logic ---
+        function createFolder() {
+            const name = prompt("请输入文件夹名称:", "新项目");
+            if (!name) return;
+            const id = 'f-' + Date.now();
+            folders[id] = { id, name, created: Date.now() };
+            currentFolderId = id;
+            renderFolderList();
+            renderFileList();
+        }
+        function switchFolder(id) {
+            currentFolderId = id;
+            currentFileId = null; 
+            renderFolderList();
+            renderFileList();
+            const container = document.getElementById('pdfScroller');
+            container.innerHTML = `<div id="emptyState" class="w-full h-full flex flex-col items-center justify-center text-gray-500">
+                <i class="ph-duotone ph-folder-open text-6xl mb-4 opacity-50"></i>
+                <p class="mt-2">文件夹: ${folders[id].name}</p>
+                <p class="text-sm">请导入 PDF 文档开始工作</p>
+            </div>`;
+            document.getElementById('fileStatus').innerText = "未选择文件";
+        }
+        function renderFolderList() {
+            const list = document.getElementById('folderList');
+            list.innerHTML = Object.values(folders).sort((a,b) => a.created - b.created).map(f => `
+                <div class="list-item ${currentFolderId === f.id ? 'active' : ''}" onclick="switchFolder('${f.id}')">
+                    <i class="ph-fill ph-folder text-yellow-500"></i>
+                    <span class="truncate">${f.name}</span>
+                </div>
+            `).join('');
+        }
+
+        // --- File Logic ---
+        async function handleFileSelect(e) {
+            const fileList = e.target.files;
+            if(fileList.length === 0) return;
+            let lastId = null;
+            for (let i = 0; i < fileList.length; i++) {
+                const file = fileList[i];
+                const id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+                files[id] = { id, name: file.name, file: file, folderId: currentFolderId, notes: [] }; 
+                lastId = id;
+            }
+            e.target.value = '';
+            renderFileList();
+            if (lastId) loadPDF(lastId);
+        }
+        function renderFileList() {
+            const currentFiles = Object.values(files).filter(f => f.folderId === currentFolderId);
+            const list = document.getElementById('fileList');
+            document.getElementById('analysisBar').style.display = currentFiles.length > 1 ? 'block' : 'none';
+            list.innerHTML = currentFiles.map(f => `
+                <div class="list-item ${currentFileId === f.id ? 'active' : ''}" onclick="loadPDF('${f.id}')">
+                    <i class="ph-file-pdf text-indigo-400"></i>
+                    <span class="truncate flex-1">${f.name}</span>
+                </div>
+            `).join('');
+        }
+
+        // --- Analysis & Utils ---
+        async function analyzeCurrentFolder() {
+            const currentFiles = Object.values(files).filter(f => f.folderId === currentFolderId);
+            if (currentFiles.length < 2) return alert("至少需要两个文件才能进行交叉分析。");
+            document.getElementById('analysisModal').style.display = 'flex';
+            const resultBody = document.getElementById('analysisResult');
+            resultBody.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-400 gap-3"><i class="ph-bold ph-spinner animate-spin text-4xl text-indigo-500"></i><p>正在提取 ${currentFiles.length} 篇文档的内容...</p></div>`;
+            try {
+                let combinedText = `请分析这些论文的异同点。重点关注：研究目标、方法论和关键发现。请使用 Markdown 格式并用中文回答。\n\n`;
+                for (let i = 0; i < currentFiles.length; i++) {
+                    const f = currentFiles[i];
+                    const text = await extractPdfText(f.file); 
+                    combinedText += `--- 论文 ${i+1}: ${f.name} ---\n${text.substring(0, 3000)}\n\n`;
+                }
+                resultBody.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-400 gap-3"><i class="ph-bold ph-brain text-4xl text-pink-500 animate-pulse"></i><p>AI 正在对比分析中...</p></div>`;
+                const analysis = await callAI(combinedText, false); 
+                resultBody.innerHTML = marked.parse(analysis);
+            } catch (e) { resultBody.innerHTML = `<div class="text-red-500 p-4">分析失败: ${e.message}</div>`; }
+        }
+        function closeAnalysis() { document.getElementById('analysisModal').style.display = 'none'; }
+        async function extractPdfText(fileBlob) {
+            const arrayBuffer = await fileBlob.arrayBuffer();
+            const loadingTask = pdfjsLib.getDocument(arrayBuffer);
+            const doc = await loadingTask.promise;
+            let fullText = "";
+            const maxPages = Math.min(doc.numPages, 3); 
+            for (let i = 1; i <= maxPages; i++) {
+                const page = await doc.getPage(i);
+                const textContent = await page.getTextContent();
+                fullText += textContent.items.map(item => item.str).join(' ') + "\n";
+            }
+            return fullText;
+        }
+
+        // --- PDF Loader ---
+        async function loadPDF(id) {
+            if (currentFileId === id && pdfDoc) return;
+            
+            currentFileId = id;
+            renderFileList();
+            
+            const fileObj = files[id];
+            if (!fileObj) return; 
+            
+            document.getElementById('fileStatus').innerText = fileObj.name;
+            const container = document.getElementById('pdfScroller');
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) emptyState.style.display = 'none';
+            container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-gray-400 gap-2"><i class="ph-bold ph-spinner animate-spin text-3xl"></i><span>正在加载 PDF...</span></div>';
+            
+            try {
+                if (pdfLoadingTask) {
+                    try {
+                        await pdfLoadingTask.destroy();
+                    } catch (e) {
+                        console.warn("Destroy task failed", e);
+                    }
+                    pdfLoadingTask = null;
+                }
+                
+                pdfDoc = null; 
+
+                const arrayBuffer = await fileObj.file.arrayBuffer();
+                pdfLoadingTask = pdfjsLib.getDocument(arrayBuffer);
+                
+                const loadedPdf = await pdfLoadingTask.promise;
+                
+                if (currentFileId !== id) {
+                    if (loadedPdf) loadedPdf.destroy(); 
+                    return;
+                }
+                
+                pdfDoc = loadedPdf;
+                
+                loadOutline();
+                await renderAllPages(id);
+                
+            } catch (err) {
+                if (err.message && (err.message.includes('aborted') || err.message.includes('destroyed') || err.name === 'RenderingCancelledException')) {
+                    return;
+                }
+                console.error(err);
+                container.innerHTML = `<div class="text-red-500 m-auto mt-20 p-4 border border-red-500 rounded">加载 PDF 失败: ${err.message}</div>`;
+            }
+        }
+
+        async function renderAllPages(activeId) {
+            if (!activeId) activeId = currentFileId;
+            const container = document.getElementById('pdfScroller');
+            container.innerHTML = ''; 
+            
+            if (!pdfDoc) return;
+
+            for (let num = 1; num <= pdfDoc.numPages; num++) {
+                if (currentFileId !== activeId) return;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'page-wrapper';
+                wrapper.id = `page-wrapper-${num}`;
+                container.appendChild(wrapper);
+                await renderPage(num, wrapper);
+                const marginDiv = document.createElement('div');
+                marginDiv.className = 'margin-column';
+                marginDiv.id = `margin-${num}`;
+                wrapper.appendChild(marginDiv);
+            }
+        }
+
+        async function renderPage(num, wrapper) {
+            try {
+                const page = await pdfDoc.getPage(num);
+                const viewport = page.getViewport({ scale: scale });
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'pdf-page-container';
+                pageDiv.style.width = `${viewport.width}px`;
+                pageDiv.style.height = `${viewport.height}px`;
+                const canvas = document.createElement('canvas');
+                canvas.className = 'pdf-canvas';
+                const outputScale = window.devicePixelRatio || 1;
+                canvas.width = Math.floor(viewport.width * outputScale);
+                canvas.height = Math.floor(viewport.height * outputScale);
+                canvas.style.width = `${viewport.width}px`;
+                canvas.style.height = `${viewport.height}px`;
+                pageDiv.appendChild(canvas);
+                const textLayerDiv = document.createElement('div');
+                textLayerDiv.className = 'textLayer';
+                textLayerDiv.style.width = `${viewport.width}px`;
+                textLayerDiv.style.height = `${viewport.height}px`;
+                textLayerDiv.style.setProperty('--scale-factor', scale);
+                pageDiv.appendChild(textLayerDiv);
+                wrapper.appendChild(pageDiv);
+                const renderContext = { canvasContext: canvas.getContext('2d'), viewport: viewport, transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null };
+                await page.render(renderContext).promise;
+                const textContent = await page.getTextContent();
+                pdfjsLib.renderTextLayer({ textContent: textContent, container: textLayerDiv, viewport: viewport, textDivs: [] });
+            } catch (e) { console.warn('Page render error:', e); }
+        }
+
+        // --- Screenshot & Notes ---
+        function startScreenshotMode() {
+            document.getElementById('aiWindow').style.opacity = '0';
+            document.getElementById('screenshotLayer').style.display = 'block';
+            document.body.style.cursor = 'crosshair';
+            document.body.classList.remove('selectable-text');
+        }
+        function endScreenshotMode() {
+            document.getElementById('aiWindow').style.opacity = '1';
+            document.getElementById('screenshotLayer').style.display = 'none';
+            document.getElementById('selectionRect').style.display = 'none';
+            document.body.style.cursor = 'default';
+            if (!isHandMode) document.body.classList.add('selectable-text');
+        }
+        let isSelecting = false, startX, startY;
+        function onScreenshotMouseDown(e) { isSelecting = true; startX = e.clientX; startY = e.clientY; const box = document.getElementById('selectionRect'); box.style.display = 'block'; box.style.left = startX+'px'; box.style.top = startY+'px'; box.style.width = '0'; box.style.height = '0'; }
+        function onScreenshotMouseMove(e) { if(!isSelecting)return; const w=Math.abs(e.clientX-startX), h=Math.abs(e.clientY-startY), l=Math.min(e.clientX,startX), t=Math.min(e.clientY,startY); const box=document.getElementById('selectionRect'); box.style.width=w+'px'; box.style.height=h+'px'; box.style.left=l+'px'; box.style.top=t+'px'; }
+        async function onScreenshotMouseUp(e) { 
+            if(!isSelecting)return; isSelecting=false; const box=document.getElementById('selectionRect'); box.style.display='none'; 
+            const rect={x:parseFloat(box.style.left),y:parseFloat(box.style.top),width:parseFloat(box.style.width),height:parseFloat(box.style.height)};
+            if(rect.width>5&&rect.height>5){
+                try{ const cvs=await html2canvas(document.body,{x:rect.x+window.scrollX,y:rect.y+window.scrollY,width:rect.width,height:rect.height,useCORS:true,ignoreElements:el=>el.id==='aiWindow'||el.id==='screenshotLayer'||el.id==='analysisModal'}); currentScreenshot=cvs.toDataURL('image/jpeg',0.8); document.getElementById('screenshotPreviewBox').style.display='inline-block'; document.getElementById('screenshotThumb').src=currentScreenshot; }catch(e){console.error(e);}
+            } endScreenshotMode();
+        }
+        function checkSelection(e) {
+            if(isHandMode) return; // 手型模式下禁用选区检测
+            if(document.getElementById('screenshotLayer').style.display==='block')return;
+            const sel=window.getSelection(); const tb=document.getElementById('selectionToolbar'); const wrap=sel.anchorNode?.parentElement?.closest('.page-wrapper');
+            if(sel.toString().trim().length>0 && wrap){
+                const r=sel.getRangeAt(0).getBoundingClientRect(); tb.style.display='flex'; tb.style.top=`${Math.max(10,r.top-45)}px`; tb.style.left=`${Math.max(10,r.left)}px`;
+                tb.dataset.pageNum=wrap.id.split('-')[2]; tb.dataset.relativeTop=r.top-wrap.getBoundingClientRect().top; tb.dataset.text=sel.toString().trim();
+            } else { tb.style.display='none'; }
+        }
+        async function createMarginNote(type) {
+            const tb=document.getElementById('selectionToolbar'); tb.style.display='none';
+            const col=document.getElementById(`margin-${tb.dataset.pageNum}`); if(!col)return;
+            const cd=document.createElement('div'); cd.className='note-card'; 
+            const kids=Array.from(col.children); let t=parseFloat(tb.dataset.relativeTop);
+            if(kids.length>0){ const last=kids[kids.length-1]; const lb=last.offsetTop+last.offsetHeight+10; if(t<lb)t=lb; }
+            cd.style.top=t+'px'; cd.innerHTML=`<div class="note-close" onclick="this.parentElement.remove()">×</div><div class="text-xs font-bold text-indigo-400 mb-1">${type==='translate'?'翻译':'解释'}</div><div class="note-content loading-dots">思考中</div>`;
+            col.appendChild(cd);
+            try{ const res=await callAI(type==='translate'?"请将以下内容翻译成中文（保留 LaTeX 公式）：\n"+tb.dataset.text:"请用中文通俗解释以下内容：\n"+tb.dataset.text); const c=cd.querySelector('.note-content'); c.innerHTML=marked.parse(res); c.classList.remove('loading-dots'); MathJax.typesetPromise([cd]); }catch(e){ cd.querySelector('.note-content').innerText="错误: "+e.message; }
+        }
+
+        // --- Chat & AI ---
+        async function sendMessage() {
+            const i=document.getElementById('chatInput'); const t=i.value.trim(); if(!t&&!currentScreenshot)return;
+            appendMessage('user',t,currentScreenshot); i.value=''; let p=t; if(currentScreenshot)p+="\n[包含截图]"; clearScreenshot();
+            chatHistory.push({role:'user',content:p}); const lid=appendMessage('ai','<span class="loading-dots">思考中</span>');
+            try{ const r=await callAI(p,true); updateMessage(lid,r); chatHistory.push({role:'assistant',content:r}); }catch(e){ updateMessage(lid,"错误: "+e.message); }
+        }
+        async function callAI(p,h=false) {
+            if(!appConfig.key) throw new Error("缺少 API Key，请检查设置。");
+            let messages = h ? chatHistory : [{role:'user', content: p}];
+            if(!h) messages = [{role:'user', content: p}]; 
+            const baseUrl = appConfig.baseUrl.replace(/\/$/, "");
+            const res = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appConfig.key}` },
+                body: JSON.stringify({ model: appConfig.model, messages: messages, temperature: 0.7 })
+            });
+            if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.error?.message || `API Error ${res.status}`); }
+            const data = await res.json();
+            return data.choices[0].message.content;
+        }
+
+        function toggleAI() { document.getElementById('aiWindow').classList.toggle('active'); }
+        function takeScreenshot() { startScreenshotMode(); }
+        function clearScreenshot() { currentScreenshot = null; document.getElementById('screenshotPreviewBox').style.display = 'none'; }
+        function clearChat() { document.getElementById('chatMessages').innerHTML = ''; chatHistory=[{ role: "system", content: "你是我的学术研究助手。请用中文回答所有问题。" }]; }
+        
+        function appendMessage(role, text, img) {
+            const box = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = `chat-msg ${role}`;
+            div.id = `msg-${Date.now()}`;
+            if(img) div.innerHTML += `<img src="${img}" class="chat-img-preview">`;
+            div.innerHTML += `<div class="md-content">${marked.parse(text||'')}</div>`;
+            box.appendChild(div); box.scrollTop = box.scrollHeight;
+            return div.id;
+        }
+        
+        function updateMessage(id, text) { 
+            const el = document.getElementById(id);
+            if(el) el.querySelector('.md-content').innerHTML = marked.parse(text); 
+        }
+
+        function makeDraggable(el, h) {
+            let p1=0,p2=0,p3=0,p4=0;
+            h.onmousedown = e => { e.preventDefault(); p3=e.clientX; p4=e.clientY; document.onmouseup=close; document.onmousemove=drag; };
+            function drag(e) { e.preventDefault(); p1=p3-e.clientX; p2=p4-e.clientY; p3=e.clientX; p4=e.clientY; el.style.top=(el.offsetTop-p2)+"px"; el.style.left=(el.offsetLeft-p1)+"px"; el.style.bottom='auto'; el.style.right='auto'; }
+            function close() { document.onmouseup=null; document.onmousemove=null; }
+        }
+
+        async function changeZoom(d) { 
+            if (!pdfDoc) return;
+            const newScale = parseFloat((scale + d).toFixed(1)); 
+            if (newScale === scale) return; 
+            scale = Math.max(0.6, Math.min(3.0, newScale)); 
+            updateZoomDisplay(); 
+            const container = document.getElementById('pdfScroller');
+            const scrollRatio = container.scrollTop / (container.scrollHeight || 1);
+            await renderAllPages();
+            if (container.scrollHeight > 0) container.scrollTop = scrollRatio * container.scrollHeight;
+        }
+        
+        function updateZoomDisplay() { document.getElementById('zoomLevel').innerText = Math.round(scale*100)+'%'; }
+    </script>
+</body>
+</html>
