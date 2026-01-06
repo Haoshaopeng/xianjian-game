@@ -2,1074 +2,833 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICM Workbench v13.16 (交互增强版)</title>
-    
-    <!-- Tailwind CSS -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>雷法无间：逍遥游 (v8.3 显血版)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Phosphor Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    
-    <!-- PDF.js Core & Worker -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-    </script>
-    
-    <!-- html2canvas -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    
-    <!-- Marked & MathJax -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-
     <style>
-        :root {
-            /* Colors */
-            --bg-dark: #1e1e1e;
-            --sidebar-bg: #252526;
-            --border-color: #333;
-            --accent: #6366f1;
-            --note-bg: #2d2d30;
-            --chat-user: #2b313b;
-            --chat-ai: #2d2d30;
-            
-            /* Dimensions */
-            --note-width: 320px;
-            --sidebar-width: 280px;
-
-            /* User Customizable Typography Defaults */
-            --content-size: 14px;
-            --content-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
-            --line-height: 1.6;
+        @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@500;700&display=swap');
+        
+        body { 
+            margin: 0; overflow: hidden; background-color: #87CEEB; 
+            font-family: 'Noto Serif SC', serif; 
+            touch-action: none; user-select: none; 
+            -webkit-tap-highlight-color: transparent;
         }
 
-        body {
-            background-color: var(--bg-dark);
-            color: #ccc;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
-            height: 100vh;
+        #gameCanvas3D { position: absolute; top: 0; left: 0; z-index: 1; }
+        #hudCanvas { position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none; }
+
+        /* 氛围层 */
+        .mist-overlay {
+            position: fixed; inset: 0; z-index: 5; pointer-events: none;
+            background: radial-gradient(circle at center, transparent 40%, rgba(255,255,255,0.5) 100%);
+            mix-blend-mode: screen;
+        }
+
+        /* UI 面板 */
+        .cultivation-panel {
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid #d4af37;
+            border-radius: 8px;
+            color: #5d4037;
+            pointer-events: auto;
+            position: relative;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            backdrop-filter: blur(8px);
+        }
+
+        /* 按钮通用样式 */
+        .taoist-btn {
+            background: linear-gradient(180deg, #fffcf5 0%, #e6dace 100%);
+            border: 2px solid #d4af37;
+            color: #8b4500;
+            font-family: 'Ma Shan Zheng', cursive;
+            display: flex; align-items: center; justify-content: center;
+            position: absolute; /* 改为绝对定位以便布局 */
+            transition: transform 0.1s;
+            box-shadow: 0 4px 0 #b08d55;
             overflow: hidden;
-            display: flex;
-            user-select: none;
+            border-radius: 50%;
+            pointer-events: auto; 
+            z-index: 30;
         }
+        .taoist-btn:active { transform: scale(0.95); box-shadow: 0 0 0 #b08d55; }
         
-        .selectable-text { user-select: text; }
-        
-        /* Cursor Modes */
-        .cursor-grab { cursor: grab !important; }
-        .cursor-grabbing { cursor: grabbing !important; }
-
-        /* --- Sidebar --- */
-        .sidebar {
-            width: var(--sidebar-width); 
-            background: var(--sidebar-bg); 
-            border-right: 1px solid var(--border-color);
-            display: flex; flex-direction: column; flex-shrink: 0; z-index: 40;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow: hidden;
-            white-space: nowrap;
-        }
-        
-        .sidebar.collapsed {
-            width: 0;
-            border-right: none;
-            opacity: 0;
+        /* 技能冷却遮罩 */
+        .cd-mask {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 0;
+            background: rgba(0,0,0,0.5); transition: height 0.1s linear;
         }
 
-        /* Sidebar Tabs */
-        .sidebar-tabs {
-            display: flex;
-            background: #1e1e1e;
-            border-bottom: 1px solid var(--border-color);
+        .btn-ult {
+            border-color: #ff3333; color: #ff3333;
+            background: linear-gradient(180deg, #fff5f5 0%, #ffcccc 100%);
+            box-shadow: 0 4px 0 #cc0000;
         }
-        .sidebar-tab {
-            flex: 1; text-align: center; padding: 10px 0; font-size: 13px; cursor: pointer; color: #888;
-            border-bottom: 2px solid transparent; transition: all 0.2s;
-        }
-        .sidebar-tab:hover { color: #ccc; background: #2a2a2a; }
-        .sidebar-tab.active { color: white; font-weight: bold; border-bottom-color: var(--accent); background: #252526; }
+        .btn-ult:active { box-shadow: 0 0 0 #cc0000; }
 
-        /* Tab Content Areas */
-        .tab-content { display: none; flex: 1; flex-direction: column; overflow: hidden; }
-        .tab-content.active { display: flex; }
-        
-        .folder-section {
-            flex: 0 0 40%; 
-            border-bottom: 1px solid var(--border-color);
-            display: flex; flex-direction: column;
-            overflow: hidden;
+        /* 状态条 */
+        .bar-container { height: 14px; background: #ddd; margin-top: 6px; border-radius: 7px; overflow: hidden; position: relative; }
+        .bar-fill { height: 100%; width: 0%; transition: width 0.3s; }
+        .bar-text { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; color: #fff; font-weight: bold; text-shadow: 0 0 2px #000;
+            z-index: 2;
         }
-        
-        .file-section {
-            flex: 1;
-            display: flex; flex-direction: column;
-            overflow: hidden;
-        }
+        .hp-fill { background: linear-gradient(90deg, #ff6b6b, #ee0000); }
+        .xp-fill { background: linear-gradient(90deg, #ffd700, #ffaa00); }
 
-        /* Outline Styles */
-        .outline-tree { flex: 1; overflow-y: auto; padding: 10px 0; }
-        .outline-item {
-            padding: 6px 12px; cursor: pointer; color: #aaa; font-size: 13px;
-            display: flex; align-items: center; width: 100%;
-            transition: background 0.2s;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            border-left: 2px solid transparent;
+        /* 答题框 */
+        #quizModal { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.7); z-index: 50; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+        #quizBox {
+            width: 90%; max-width: 500px;
+            background: #fff;
+            color: #333;
+            border: 4px solid #d4af37;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        .outline-item:hover { background: #333; color: white; }
-        .outline-item.scanned { color: #93c5fd; } 
-        .outline-item span { overflow: hidden; text-overflow: ellipsis; }
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-        .sidebar-header {
-            padding: 10px 12px; font-size: 12px; font-weight: bold; color: #888; text-transform: uppercase;
-            display: flex; justify-content: space-between; align-items: center; background: #2d2d2d;
+        /* 触摸分区 */
+        #touchZoneLeft { position: absolute; top:0; left:0; width: 50%; height: 100%; z-index: 20; pointer-events: auto; }
+        #touchZoneRight { position: absolute; top:0; left:50%; width: 50%; height: 100%; z-index: 20; pointer-events: auto; }
+        
+        #startScreen, #winScreen {
+            position: fixed; inset: 0; z-index: 100;
+            background: rgba(240, 248, 255, 0.95);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            animation: fadeIn 0.5s;
         }
-
-        .list-item {
-            padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #aaa;
-            border-left: 3px solid transparent; transition: background 0.2s;
+        
+        .ink-text { font-family: 'Ma Shan Zheng', cursive; }
+        
+        /* 技能盘容器 - 右下角 */
+        #skillContainer {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 180px;
+            height: 180px;
+            pointer-events: none; /* 让触摸穿透空白区 */
         }
-        .list-item:hover { background: #2d2d2d; }
-        .list-item.active { background: #37373d; border-left-color: var(--accent); color: #fff; font-weight: 500; }
-
-        /* --- Analysis Modal --- */
-        .analysis-modal {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 5000;
-            display: none; justify-content: center; align-items: center;
-        }
-        .analysis-content {
-            width: 900px; max-width: 95%; height: 85vh; background: #1e1e1e;
-            border: 1px solid #454545; border-radius: 12px; display: flex; flex-direction: column;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
-        }
-        .analysis-body {
-            flex: 1; overflow-y: auto; padding: 40px; 
-            color: #ddd;
-            font-size: var(--content-size);
-            font-family: var(--content-font);
-            line-height: var(--line-height);
-        }
-        .analysis-body h1, .analysis-body h2, .analysis-body h3 { color: white; margin-top: 1.5em; margin-bottom: 0.8em; font-weight: bold; }
-        .analysis-body h1 { font-size: 1.8em; border-bottom: 1px solid #444; padding-bottom: 10px; }
-        .analysis-body h2 { font-size: 1.4em; }
-        .analysis-body ul, .analysis-body ol { padding-left: 20px; margin-bottom: 1em; }
-        .analysis-body ul { list-style: disc; }
-        .analysis-body table { width: 100%; border-collapse: collapse; margin: 1em 0; }
-        .analysis-body th, .analysis-body td { border: 1px solid #444; padding: 10px; text-align: left; }
-        .analysis-body th { background: #333; }
-        .analysis-body blockquote { border-left: 4px solid var(--accent); padding-left: 15px; color: #aaa; margin: 1em 0; background: #252526; padding: 10px; }
-
-        /* --- Main Area --- */
-        .main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #525659; position: relative; }
-        .pdf-toolbar { height: 40px; background: #2d2d2d; border-bottom: 1px solid #111; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10; }
-        .pdf-scroller { flex: 1; overflow-y: auto; overflow-x: auto; padding: 40px; display: block; text-align: center; }
-        .page-wrapper { display: inline-flex; margin-bottom: 40px; position: relative; text-align: left; vertical-align: top; transition: background 0.3s; }
-        
-        @keyframes pageHighlight {
-            0% { box-shadow: 0 0 0 2px var(--accent); }
-            50% { box-shadow: 0 0 0 6px var(--accent); }
-            100% { box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-        }
-        .page-wrapper.highlight-jump .pdf-page-container {
-            animation: pageHighlight 1s ease-out;
-        }
-
-        .pdf-page-container { position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.4); background: white; flex-shrink: 0; }
-        .pdf-canvas { display: block; }
-        .textLayer { position: absolute; inset: 0; overflow: hidden; opacity: 0.2; line-height: 1.0; transform-origin: 0 0; }
-        .textLayer ::selection { background: rgba(99, 102, 241, 0.4); }
-        .textLayer > span { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
-        
-        .margin-column { width: var(--note-width); flex-shrink: 0; position: relative; margin-left: 20px; }
-        .note-card { position: absolute; width: 100%; background: var(--note-bg); border: 1px solid #454545; border-left: 3px solid var(--accent); border-radius: 6px; padding: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideInLeft 0.3s ease-out; transition: top 0.3s ease; z-index: 10; }
-        .note-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-color: #666; z-index: 20; }
-        .note-close { position: absolute; top: 4px; right: 4px; cursor: pointer; color: #666; font-size: 14px; }
-        .note-content { font-size: var(--content-size); font-family: var(--content-font); line-height: var(--line-height); color: #e0e0e0; }
-
-        /* --- Agent Window --- */
-        .ai-float-window { position: fixed; bottom: 90px; right: 30px; width: 400px; height: 550px; background: #1e1e1e; border: 1px solid #454545; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); display: flex; flex-direction: column; z-index: 100; transition: opacity 0.2s, transform 0.2s; opacity: 0; pointer-events: none; transform: translateY(20px); }
-        .ai-float-window.active { opacity: 1; pointer-events: auto; transform: translateY(0); }
-        .ai-header { height: 40px; background: #252526; border-bottom: 1px solid #333; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-radius: 12px 12px 0 0; cursor: move; user-select: none; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
-        .chat-msg { max-width: 90%; padding: 10px 14px; border-radius: 8px; word-wrap: break-word; }
-        .chat-msg.user { align-self: flex-end; background: var(--chat-user); }
-        .chat-msg.ai { align-self: flex-start; background: var(--chat-ai); border: 1px solid #333; }
-        
-        .md-content { font-size: var(--content-size); font-family: var(--content-font); line-height: var(--line-height); }
-        .md-content p { margin-bottom: 0.5em; }
-        .md-content pre { background: #111; padding: 8px; border-radius: 4px; overflow-x: auto; margin: 5px 0; }
-        .md-content code { background: #333; padding: 2px 4px; border-radius: 3px; color: #f472b6; font-family: monospace; font-size: 0.9em; }
-
-        .chat-input-area { padding: 10px; background: #252526; border-top: 1px solid #333; border-radius: 0 0 12px 12px; }
-        .chat-textarea { width: 100%; background: #181818; border: 1px solid #333; color: #eee; padding: 8px; border-radius: 6px; font-size: 13px; resize: none; height: 50px; outline: none; }
-        .chat-textarea:focus { border-color: var(--accent); }
-        
-        .fab-btn { position: fixed; bottom: 30px; right: 30px; width: 50px; height: 50px; border-radius: 25px; background: var(--accent); color: white; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; z-index: 101; transition: transform 0.2s; }
-        .fab-btn:hover { transform: scale(1.1); }
-        
-        #selectionToolbar { position: fixed; z-index: 2000; background: #333; padding: 4px; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid #555; display: none; gap: 6px; }
-        #screenshotLayer { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; cursor: crosshair; display: none; background: rgba(0,0,0,0.1); }
-        #selectionRect { position: absolute; border: 2px solid var(--accent); background: rgba(99, 102, 241, 0.1); pointer-events: none; display: none; }
-        
-        .btn-icon { padding: 6px; border-radius: 4px; cursor: pointer; color: #aaa; display: flex; justify-content: center; align-items: center; width: 32px; height: 32px; transition: all 0.2s; }
-        .btn-icon:hover { background: #444; color: #fff; }
-        .btn-icon.active { background: var(--accent); color: white; }
-        .btn-primary { background: var(--accent); color: white; padding: 6px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; justify-content: center;}
-        
-        /* --- Settings Modal --- */
-        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 3000; display: none; justify-content: center; align-items: center; }
-        .modal-box { background: #252526; width: 450px; padding: 24px; border-radius: 8px; border: 1px solid #454545; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        .input-group { margin-bottom: 15px; }
-        .input-label { display: block; color: #aaa; font-size: 12px; margin-bottom: 5px; }
-        .input-field { width: 100%; background: #1e1e1e; border: 1px solid #3f3f3f; color: white; padding: 8px; border-radius: 4px; font-size: 13px; }
-        .input-field:focus { border-color: var(--accent); outline: none; }
-        .select-field { width: 100%; background: #1e1e1e; border: 1px solid #3f3f3f; color: white; padding: 8px; border-radius: 4px; font-size: 13px; cursor: pointer; }
-        
-        .screenshot-preview-box { display: none; position: relative; margin-bottom: 5px; }
-        .screenshot-thumb { height: 50px; border: 1px solid var(--accent); border-radius: 4px; }
-        .screenshot-close { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border-radius: 50%; width: 14px; height: 14px; font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        
-        .loading-dots::after { content: ' .'; animation: dots 1s steps(5, end) infinite; }
-        @keyframes dots { 0%, 20% { content: ' .'; } 40% { content: ' ..'; } 60% { content: ' ...'; } 80%, 100% { content: ''; } }
-        @keyframes slideInLeft { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
-        
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #424242; border-radius: 4px; }
     </style>
 </head>
-<body class="selectable-text">
+<body>
 
-    <!-- Screenshot Layer -->
-    <div id="screenshotLayer"><div id="selectionRect"></div></div>
+    <div class="mist-overlay"></div>
+    <canvas id="gameCanvas3D"></canvas>
+    <canvas id="hudCanvas"></canvas>
 
-    <!-- Sidebar -->
-    <div class="sidebar" id="mainSidebar">
-        <!-- Sidebar Tabs -->
-        <div class="sidebar-tabs">
-            <div class="sidebar-tab active" onclick="switchSidebarTab('files')" id="tab-btn-files">资源</div>
-            <div class="sidebar-tab" onclick="switchSidebarTab('outline')" id="tab-btn-outline">大纲</div>
-        </div>
+    <!-- 触摸层: 左移 右视 -->
+    <div id="touchZoneLeft"></div>
+    <div id="touchZoneRight"></div>
 
-        <!-- Tab 1: Files & Folders -->
-        <div class="tab-content active" id="tab-files">
-            <!-- Folders -->
-            <div class="folder-section">
-                <div class="sidebar-header">
-                    <span>文件夹</span>
-                    <button class="btn-icon text-xs" onclick="createFolder()" title="新建文件夹"><i class="ph-bold ph-plus"></i></button>
+    <div class="ui-layer p-4 flex flex-col justify-between pointer-events-none">
+        <!-- Top -->
+        <div class="flex justify-between items-start select-none w-full pointer-events-auto">
+            <div class="cultivation-panel p-3 w-64 shadow-lg">
+                <div class="flex justify-between text-xs text-gray-500 mb-1 font-bold">
+                    <span>道号: 雷云子</span>
+                    <span class="text-orange-600"><span id="levelDisplay">练气一层</span></span>
                 </div>
-                <div id="folderList" class="flex-1 overflow-y-auto p-1"></div>
-            </div>
-
-            <!-- Files -->
-            <div class="file-section">
-                <div class="sidebar-header bg-gray-800 border-t border-gray-700">
-                    <span>文件列表</span>
-                    <div class="flex gap-2">
-                        <button class="btn-icon text-xs" onclick="openSettings()" title="设置"><i class="ph-bold ph-gear"></i></button>
-                    </div>
+                <div class="flex items-end justify-between mb-1">
+                    <span id="voltageDisplay" class="text-xl font-bold text-yellow-600 ink-text">修仙面板</span>
                 </div>
-                
-                <div class="p-2 border-b border-gray-700 bg-gray-800" id="analysisBar" style="display:none;">
-                    <button onclick="analyzeCurrentFolder()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-1.5 rounded flex items-center justify-center gap-2">
-                        <i class="ph-bold ph-strategy"></i> 多文档交叉分析
-                    </button>
+                <!-- HP Bar with Text -->
+                <div class="bar-container">
+                    <span id="hpText" class="bar-text">HP: 220/1000</span>
+                    <div id="hpBar" class="bar-fill hp-fill" style="width: 100%"></div>
                 </div>
-
-                <div id="fileList" class="flex-1 overflow-y-auto p-1"></div>
-                
-                <div class="p-3 border-t border-color bg-sidebar-bg">
-                    <input type="file" id="fileInput" hidden multiple accept=".pdf" onchange="handleFileSelect(event)">
-                    <button onclick="document.getElementById('fileInput').click()" class="btn-primary w-full">
-                        <i class="ph-bold ph-plus"></i> 导入PDF
-                    </button>
+                <!-- XP Bar with Text -->
+                <div class="bar-container">
+                    <span id="xpText" class="bar-text">XP: 0/100</span>
+                    <div id="xpBar" class="bar-fill xp-fill" style="width: 0%"></div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Tab 2: Outline -->
-        <div class="tab-content" id="tab-outline">
-            <div class="sidebar-header">
-                <span>文档目录</span>
-                <button class="btn-icon text-xs" onclick="refreshOutline()" title="刷新"><i class="ph-bold ph-arrows-clockwise"></i></button>
-            </div>
-            <div id="outlineTree" class="outline-tree">
-                <div class="flex flex-col items-center justify-center h-40 text-gray-500 text-xs gap-2 p-4 text-center">
-                    <i class="ph-duotone ph-list-dashes text-3xl opacity-50"></i>
-                    <p>加载 PDF 以显示大纲<br>支持点击跳转</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Area -->
-    <div class="main-area">
-        <div class="pdf-toolbar">
-            <div class="flex items-center gap-2" style="min-width: 0;">
-                <button class="btn-icon" id="sidebarToggleBtn" onclick="toggleSidebar()" title="折叠/展开侧边栏">
-                    <i class="ph-bold ph-sidebar-simple"></i>
-                </button>
-                <div class="h-4 w-px bg-gray-700 mx-1"></div>
-                <button class="btn-icon" id="handToolBtn" onclick="toggleHandMode()" title="切换手型/选择模式">
-                    <i class="ph-bold ph-hand-palm"></i>
-                </button>
-                <div class="text-xs text-gray-400 truncate max-w-[200px] ml-2" id="fileStatus">未选择文件</div>
             </div>
             
-            <div class="flex items-center gap-2">
-                <button class="btn-icon" onclick="changeZoom(-0.2)"><i class="ph-bold ph-minus"></i></button>
-                <span class="text-xs text-gray-300 w-12 text-center" id="zoomLevel">100%</span>
-                <button class="btn-icon" onclick="changeZoom(0.2)"><i class="ph-bold ph-plus"></i></button>
-            </div>
-        </div>
-
-        <div class="pdf-scroller" id="pdfScroller">
-            <div id="emptyState" class="w-full h-full flex flex-col items-center justify-center text-gray-500">
-                <i class="ph-duotone ph-folder-open text-6xl mb-4 opacity-50"></i>
-                <p class="mt-2">请选择文件夹并导入 PDF 文档</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Analysis Modal -->
-    <div class="analysis-modal" id="analysisModal">
-        <div class="analysis-content">
-            <div class="h-12 border-b border-gray-600 flex items-center justify-between px-4 bg-gray-800 rounded-t-lg flex-shrink-0">
-                <span class="font-bold text-white flex items-center gap-2">
-                    <i class="ph-bold ph-strategy text-indigo-400"></i> 交叉分析报告
-                </span>
-                <button onclick="closeAnalysis()" class="text-gray-400 hover:text-white"><i class="ph-bold ph-x text-lg"></i></button>
-            </div>
-            <div class="analysis-body" id="analysisResult">
-                <div class="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-                    <i class="ph-bold ph-spinner animate-spin text-4xl text-indigo-500"></i>
-                    <p>正在分析文献...</p>
-                </div>
-            </div>
-            <div class="p-3 border-t border-gray-700 bg-gray-800 flex justify-end flex-shrink-0 rounded-b-lg">
-                <button onclick="closeAnalysis()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-sm">关闭</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- AI Agent Window -->
-    <div class="fab-btn" onclick="toggleAI()" title="AI 助手">
-        <i class="ph-bold ph-robot"></i>
-    </div>
-    <div class="ai-float-window" id="aiWindow">
-        <div class="ai-header" id="aiHeader">
-            <div class="flex items-center gap-2 font-bold text-sm text-white">
-                <i class="ph-bold ph-sparkle text-indigo-400"></i> AI 助手
-            </div>
             <div class="flex gap-2">
-                <!-- 添加 stopPropagation 防止拖拽干扰点击 -->
-                <i class="ph-bold ph-gear cursor-pointer text-gray-400 hover:text-white" onclick="openSettings(); event.stopPropagation();" title="设置"></i>
-                <i class="ph-bold ph-x cursor-pointer text-gray-400 hover:text-white" onclick="toggleAI(); event.stopPropagation();" title="关闭"></i>
+                 <button class="cultivation-panel w-10 h-10 flex items-center justify-center text-lg rounded-full" onclick="toggleMute()">
+                    <span id="muteIcon">🔊</span>
+                </button>
+                <div class="cultivation-panel p-1 rounded-full border-none" style="width: 80px; height: 80px; overflow: hidden; padding: 0;">
+                    <canvas id="minimapCanvas" width="80" height="80" class="bg-blue-50"></canvas>
+                </div>
             </div>
         </div>
-        <div class="ai-body" style="display:flex; flex-direction:column; height: calc(100% - 40px);">
-            <div class="chat-messages" id="chatMessages">
-                <div class="chat-msg ai">
-                    <div class="md-content">您好！我是您的学术助手。请先在设置中配置 API。</div>
-                </div>
+
+        <div id="killFeed" class="absolute top-40 left-4 text-sm space-y-1 opacity-90 w-64 text-gray-800 font-bold" style="text-shadow: 0 0 2px white;"></div>
+
+        <!-- Log Area -->
+        <div class="absolute bottom-4 left-4 cultivation-panel p-2 w-48 hidden md:block h-32 flex flex-col opacity-80 pointer-events-none">
+            <div id="logArea" class="flex-1 overflow-y-auto text-xs text-gray-600 scrollbar-hide space-y-1"></div>
+        </div>
+
+        <!-- Right Bottom Skill Container (MOBA Layout) -->
+        <div id="skillContainer">
+            <!-- 普攻 (最大, 右下角) -->
+            <div id="fireBtn" class="taoist-btn w-24 h-24 text-5xl font-bold border-yellow-500 text-yellow-700 bg-yellow-50 shadow-lg" 
+                 style="bottom: 0; right: 0;"
+                 ontouchstart="startFire()" ontouchend="stopFire()" onmousedown="startFire()" onmouseup="stopFire()">
+                剑
             </div>
-            <div class="chat-input-area">
-                <div class="screenshot-preview-box" id="screenshotPreviewBox">
-                    <img id="screenshotThumb" class="screenshot-thumb">
-                    <div class="screenshot-close" onclick="clearScreenshot()">×</div>
-                </div>
-                <div class="flex gap-2 mb-2">
-                    <button class="px-2 py-1 bg-gray-700 rounded text-xs hover:bg-gray-600 text-gray-300 flex items-center gap-1" onclick="startScreenshotMode()">
-                        <i class="ph-bold ph-camera"></i> 截图
-                    </button>
-                    <button class="px-2 py-1 bg-gray-700 rounded text-xs hover:bg-gray-600 text-gray-300" onclick="clearChat()">
-                        <i class="ph-bold ph-trash"></i> 清空
-                    </button>
-                </div>
-                <div class="relative">
-                    <textarea id="chatInput" class="chat-textarea" placeholder="请输入问题..." onkeydown="if(event.ctrlKey && event.key==='Enter') sendMessage()"></textarea>
-                    <button onclick="sendMessage()" class="absolute bottom-2 right-2 text-indigo-400 hover:text-indigo-300"><i class="ph-fill ph-paper-plane-right text-xl"></i></button>
-                </div>
+
+            <!-- 加速 (小, 普攻左侧) -->
+            <div class="taoist-btn w-14 h-14 text-xl bg-green-50 text-green-600 border-green-300"
+                 style="bottom: 10px; right: 110px;"
+                 onclick="activateSkill('speed')">
+                遁
+                <div id="skillCd2" class="cd-mask"></div>
+            </div>
+
+            <!-- 护盾 (小, 普攻上方) -->
+            <div class="taoist-btn w-14 h-14 text-xl bg-blue-50 text-blue-600 border-blue-300"
+                 style="bottom: 110px; right: 10px;"
+                 onclick="activateSkill('shield')">
+                罩
+                <div id="skillCd1" class="cd-mask"></div>
+            </div>
+
+            <!-- 大招 (中, 普攻左上方) -->
+            <div class="taoist-btn btn-ult w-18 h-18 text-3xl font-bold"
+                 style="bottom: 80px; right: 80px; width: 70px; height: 70px;"
+                 onclick="triggerUltimate()">
+                雷
+                <div id="ultCd" class="cd-mask"></div>
             </div>
         </div>
     </div>
 
-    <!-- Selection Toolbar -->
-    <div id="selectionToolbar">
-        <button class="btn-icon text-indigo-400 hover:bg-indigo-900" onclick="createMarginNote('translate')" title="翻译">
-            <i class="ph-bold ph-translate"></i>
-        </button>
-        <button class="btn-icon text-pink-400 hover:bg-pink-900" onclick="createMarginNote('explain')" title="解释">
-            <i class="ph-bold ph-brain"></i>
-        </button>
-    </div>
-
-    <!-- Settings Modal -->
-    <div class="modal" id="settingsModal">
-        <div class="modal-box">
-            <h3 class="font-bold text-white mb-4 text-lg border-b border-gray-700 pb-2">设置</h3>
-            <div class="input-group">
-                <label class="input-label">API 地址 (Base URL)</label>
-                <input type="text" id="apiEndpoint" class="input-field" placeholder="https://api.deepseek.com">
-                <p class="text-xs text-gray-500 mt-1">默认: https://api.deepseek.com</p>
+    <!-- Quiz -->
+    <div id="quizModal">
+        <div id="quizBox">
+            <div class="bg-yellow-50 p-4 text-center border-b border-yellow-200 rounded-t-lg">
+                <span id="quizTitle" class="font-bold text-yellow-800 text-2xl ink-text">道法考验</span>
             </div>
-            <div class="input-group">
-                <label class="input-label">API 密钥 (API Key)</label>
-                <input type="password" id="apiKey" class="input-field" placeholder="sk-...">
-            </div>
-            <hr class="border-gray-700 my-4">
-            <div class="flex gap-4">
-                <div class="input-group flex-1">
-                    <label class="input-label">输出字体大小</label>
-                    <select id="fontSizeSelect" class="select-field">
-                        <option value="12">小 (12px)</option>
-                        <option value="14" selected>标准 (14px)</option>
-                        <option value="16">大 (16px)</option>
-                        <option value="18">特大 (18px)</option>
-                    </select>
-                </div>
-                <div class="input-group flex-1">
-                    <label class="input-label">输出字体样式</label>
-                    <select id="fontStyleSelect" class="select-field">
-                        <option value="sans">无衬线 (现代)</option>
-                        <option value="serif">衬线 (学术)</option>
-                        <option value="mono">等宽 (代码)</option>
-                    </select>
-                </div>
-            </div>
-            <div class="flex justify-end gap-2 mt-6">
-                <button class="px-4 py-2 text-gray-400 text-sm hover:text-white" onclick="closeSettings()">取消</button>
-                <button class="btn-primary" onclick="saveSettings()">保存并应用</button>
+            <div id="quizTimerBar" class="h-1 bg-yellow-500 w-full transition-all duration-100 ease-linear"></div>
+            <div class="p-6">
+                <p id="quizQuestion" class="text-xl mb-6 text-gray-800 font-bold text-center">...</p>
+                <div id="quizOptions" class="grid grid-cols-1 gap-3"></div>
             </div>
         </div>
+    </div>
+
+    <!-- Start -->
+    <div id="startScreen">
+        <h1 class="text-7xl md:text-9xl font-bold text-yellow-600 ink-text mb-4 drop-shadow-xl">雷法无间</h1>
+        <div class="text-2xl text-gray-500 mb-12 font-bold tracking-[0.5em]">逍遥游 · 仙界篇</div>
+        <button class="relative bg-gradient-to-b from-[#fffcf5] to-[#e6dace] border-2 border-[#d4af37] text-[#8b4500] font-[Ma_Shan_Zheng] px-20 py-6 text-3xl rounded-full hover:scale-105 shadow-xl transition-transform" style="pointer-events: auto;" onclick="startGame()">
+            踏入仙途
+        </button>
+        <div class="text-gray-500 text-sm mt-8 font-mono bg-white/50 px-4 py-2 rounded">
+            左屏摇杆移动 · 右屏滑动旋转视角 · 右下御剑
+        </div>
+    </div>
+
+    <!-- Win -->
+    <div id="winScreen" style="display:none">
+        <h1 class="text-8xl font-bold text-yellow-600 ink-text mb-6">证道飞升</h1>
+        <p class="text-2xl text-gray-600 mb-12">九天十地 · 唯我独尊</p>
+        <button class="relative bg-gradient-to-b from-[#fffcf5] to-[#e6dace] border-2 border-[#d4af37] text-[#8b4500] font-[Ma_Shan_Zheng] px-12 py-5 text-2xl rounded-full hover:scale-105 shadow-xl transition-transform" style="pointer-events: auto;" onclick="location.reload()">再入轮回</button>
     </div>
 
     <script>
-        // --- Global State ---
-        let pdfDoc = null;
-        let pdfLoadingTask = null;
-        let scale = 1.0;
-        let currentFileId = null;
-        let currentFolderId = 'default';
-        
-        let folders = { 'default': { id: 'default', name: '默认项目', created: Date.now() } };
-        let files = {}; 
-        
-        let currentScreenshot = null;
-        let chatHistory = [{ role: "system", content: "你是我的学术研究助手。请用中文回答所有问题。" }];
-        
-        let appConfig = {
-            key: '',
-            baseUrl: 'https://api.deepseek.com',
-            model: 'deepseek-chat',
-            fontSize: '14',
-            fontStyle: 'sans'
+        /** * 雷法无间 v8.3 - 显血版 */
+
+        // --- 1. Audio ---
+        const AudioSys = {
+            ctx: null, muted: false,
+            init: function() {
+                if(!this.ctx) this.ctx = new (window.AudioContext||window.webkitAudioContext)();
+                if(this.ctx.state==='suspended') this.ctx.resume();
+            },
+            playTone: function(freq, type, dur, vol=0.1) {
+                if(this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + dur);
+            },
+            speak: function(text) {
+                if(this.muted || !window.speechSynthesis) return;
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'zh-CN'; u.rate = 1.2;
+                window.speechSynthesis.speak(u);
+            },
+            stopSpeak: function() { if(window.speechSynthesis) window.speechSynthesis.cancel(); },
+            sword: function() { this.playTone(800, 'triangle', 0.1, 0.1); },
+            gong: function() { this.playTone(150, 'sine', 0.5, 0.2); },
+            thunder: function() { 
+                if(this.muted||!this.ctx)return;
+                const o = this.ctx.createOscillator(); o.type='sawtooth'; o.frequency.value=50;
+                const g = this.ctx.createGain(); g.gain.setValueAtTime(0.2, this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime+0.5);
+                o.connect(g); g.connect(this.ctx.destination); o.start(); o.stop(this.ctx.currentTime+0.5);
+            }
         };
+        function toggleMute() { 
+            AudioSys.muted = !AudioSys.muted; 
+            document.getElementById('muteIcon').innerText = AudioSys.muted ? '🔇' : '🔊'; 
+            if(AudioSys.muted) AudioSys.stopSpeak();
+        }
 
-        // --- Init ---
-        document.addEventListener('DOMContentLoaded', () => {
-            loadSettings(); 
-            updateZoomDisplay();
-            makeDraggable(document.getElementById('aiWindow'), document.getElementById('aiHeader'));
-            document.addEventListener('mouseup', checkSelection);
+        // --- 2. Input System ---
+        let input = { 
+            moveActive: false, moveAngle: 0, movePower: 0,
+            camAngle: 0, fire: false, keys: {} 
+        };
+        
+        let leftTouch = { id: null, startX:0, startY:0, curX:0, curY:0 };
+        let rightTouch = { id: null, lastX:0 };
+
+        function initInput() {
+            window.addEventListener('keydown', e => { 
+                input.keys[e.code]=true; 
+                if(STATE.mode==='PLAYING'){ 
+                    if(e.code==='Space') activateSkill('shield'); 
+                    if(e.code==='ShiftLeft') activateSkill('speed'); 
+                    if(e.code==='KeyR') triggerUltimate();
+                    if(e.code==='KeyQ') input.camAngle += 0.05;
+                    if(e.code==='KeyE') input.camAngle -= 0.05;
+                }
+            });
+            window.addEventListener('keyup', e => input.keys[e.code]=false);
+
+            const zoneL = document.getElementById('touchZoneLeft');
+            zoneL.addEventListener('touchstart', e => {
+                e.preventDefault();
+                const t = e.changedTouches[0];
+                if(leftTouch.id === null) {
+                    leftTouch.id = t.identifier;
+                    leftTouch.startX = t.clientX; leftTouch.startY = t.clientY;
+                    leftTouch.curX = t.clientX; leftTouch.curY = t.clientY;
+                    input.moveActive = true;
+                    AudioSys.init();
+                }
+            }, {passive:false});
             
-            const layer = document.getElementById('screenshotLayer');
-            layer.addEventListener('mousedown', onScreenshotMouseDown);
-            layer.addEventListener('mousemove', onScreenshotMouseMove);
-            layer.addEventListener('mouseup', onScreenshotMouseUp);
+            zoneL.addEventListener('touchmove', e => {
+                e.preventDefault();
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(e.changedTouches[i].identifier === leftTouch.id) {
+                        const t = e.changedTouches[i];
+                        leftTouch.curX = t.clientX; leftTouch.curY = t.clientY;
+                        const dx = leftTouch.curX - leftTouch.startX;
+                        const dy = leftTouch.curY - leftTouch.startY;
+                        const dist = Math.hypot(dx, dy);
+                        input.moveAngle = Math.atan2(dy, dx);
+                        input.movePower = Math.min(dist/70, 1.0);
+                    }
+                }
+            }, {passive:false});
 
-            renderFolderList();
-            renderFileList();
+            const endL = e => {
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(e.changedTouches[i].identifier === leftTouch.id) {
+                        input.moveActive = false; input.movePower = 0; leftTouch.id = null;
+                    }
+                }
+            };
+            zoneL.addEventListener('touchend', endL); zoneL.addEventListener('touchcancel', endL);
+
+            const zoneR = document.getElementById('touchZoneRight');
+            zoneR.addEventListener('touchstart', e => {
+                const t = e.changedTouches[0];
+                if(rightTouch.id === null) {
+                    rightTouch.id = t.identifier;
+                    rightTouch.lastX = t.clientX;
+                }
+            }, {passive:false});
+
+            zoneR.addEventListener('touchmove', e => {
+                e.preventDefault(); 
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(e.changedTouches[i].identifier === rightTouch.id) {
+                        const t = e.changedTouches[i];
+                        const deltaX = t.clientX - rightTouch.lastX;
+                        input.camAngle -= deltaX * 0.005; 
+                        rightTouch.lastX = t.clientX;
+                    }
+                }
+            }, {passive:false});
+
+            const endR = e => {
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(e.changedTouches[i].identifier === rightTouch.id) rightTouch.id = null;
+                }
+            };
+            zoneR.addEventListener('touchend', endR); zoneR.addEventListener('touchcancel', endR);
+        }
+
+        // --- 3. Config ---
+        const CFG = { mapSize: 4000, gridSize: 100 };
+        const STATE = { mode: 'MENU', time: 0 };
+        const QUESTION_DB = {
+            simple: [ {q:"电流单位?", o:["安培","伏特","欧姆","瓦特"], a:0}, {q:"红色色环?", o:["1","2","3","0"], a:1}, {q:"家庭电压?", o:["220V","110V","380V","12V"], a:0}, {q:"电容单位?", o:["法拉","亨利","焦耳","库仑"], a:0} ],
+            hard: [ {q:"三相电相角?", o:["120度","90度","180度","60度"], a:0}, {q:"P=UI 计算?", o:["电功率","电功","热量","电阻"], a:0}, {q:"漏保检测?", o:["零序电流","过载","短路","电压"], a:0} ]
+        };
+        const REALMS = ["练气", "筑基", "金丹", "元婴", "化神", "渡劫", "大乘"];
+        
+        let player = { x:0, y:0, r:20, v:220, maxV:1000, xp:0, lvl:1, nextXp:100, baseSpeed: 3.5, skills:{shield:0, speed:0}, ultCd:0, shootCd:0, status:'normal', mesh: null };
+        let entities=[], bullets=[], loot=[], obstacles=[], popups=[], clouds=[], cranes=[];
+        
+        // --- 4. Three.js ---
+        let scene, camera, renderer, materials={};
+
+        function init3D() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xaaccff);
+            scene.fog = new THREE.FogExp2(0xaaccff, 0.0015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 4000);
             
-            if(!appConfig.key) setTimeout(openSettings, 500);
-        });
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas3D'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            renderer.shadowMap.enabled = true;
 
-        // --- Hand Tool Logic ---
-        let isHandMode = false;
-        let pos = { top: 0, left: 0, x: 0, y: 0 };
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+            sun.position.set(200, 500, 200);
+            sun.castShadow = true;
+            scene.add(sun);
 
-        function toggleHandMode() {
-            isHandMode = !isHandMode;
-            const btn = document.getElementById('handToolBtn');
-            const scroller = document.getElementById('pdfScroller');
-            
-            if (isHandMode) {
-                btn.classList.add('active'); // 需要在 CSS 定义 active 样式
-                scroller.classList.add('cursor-grab');
-                document.body.classList.remove('selectable-text'); // 禁用全局选区以优化体验
-                // 添加拖拽监听
-                scroller.addEventListener('mousedown', mouseDownHandler);
-            } else {
-                btn.classList.remove('active');
-                scroller.classList.remove('cursor-grab', 'cursor-grabbing');
-                document.body.classList.add('selectable-text');
-                // 移除拖拽监听
-                scroller.removeEventListener('mousedown', mouseDownHandler);
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(CFG.mapSize*2, CFG.mapSize*2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 }));
+            floor.rotation.x = -Math.PI / 2; floor.position.y = -10;
+            scene.add(floor);
+
+            // Materials
+            materials.player = new THREE.MeshStandardMaterial({ color: 0xffaa00, roughness: 0.1 });
+            materials.sword = new THREE.MeshStandardMaterial({ color: 0x00aaff, emissive: 0x0044ff, emissiveIntensity:0.5 });
+            materials.mob = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
+            materials.boss = new THREE.MeshStandardMaterial({ color: 0x8800ff });
+            materials.beast = new THREE.MeshStandardMaterial({ color: 0x0088ff, emissive: 0x004488 });
+            materials.cloud = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, flatShading: true });
+            materials.treeLeaf = new THREE.MeshStandardMaterial({ color: 0xff69b4, flatShading:true }); 
+            materials.treeTrunk = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+            materials.loot = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+        }
+
+        function genEnvironment() {
+            const geo = new THREE.DodecahedronGeometry(15, 0);
+            for(let i=0; i<60; i++) {
+                const cloud = new THREE.Group();
+                for(let j=0; j<4; j++) {
+                    const m = new THREE.Mesh(geo, materials.cloud);
+                    m.position.set((Math.random()-0.5)*25, (Math.random()-0.5)*10, (Math.random()-0.5)*25);
+                    m.scale.setScalar(1+Math.random()); cloud.add(m);
+                }
+                cloud.position.set((Math.random()-0.5)*CFG.mapSize, 40+Math.random()*60, (Math.random()-0.5)*CFG.mapSize);
+                scene.add(cloud); clouds.push({mesh:cloud, spd:0.1+Math.random()*0.2});
+            }
+            for(let i=0; i<30; i++) {
+                const x = Math.random()*CFG.mapSize, y = Math.random()*CFG.mapSize;
+                const grp = new THREE.Group();
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(2, 4, 20, 6), materials.treeTrunk);
+                trunk.position.y=10;
+                const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(15, 0), materials.treeLeaf);
+                leaves.position.y=25;
+                grp.add(trunk, leaves);
+                grp.position.set(x, 0, y);
+                scene.add(grp); obstacles.push(grp); 
+            }
+            for(let i=0; i<10; i++) {
+                const crane = new THREE.Mesh(new THREE.ConeGeometry(2, 8, 4), new THREE.MeshBasicMaterial({color:0xffffff}));
+                crane.rotation.x = Math.PI/2;
+                scene.add(crane);
+                cranes.push({mesh:crane, cx:Math.random()*CFG.mapSize, cy:Math.random()*CFG.mapSize, r:200+Math.random()*200, angle:Math.random()*10, spd:0.5});
             }
         }
 
-        const mouseDownHandler = function(e) {
-            if (!isHandMode) return;
-            const scroller = document.getElementById('pdfScroller');
-            scroller.classList.add('cursor-grabbing');
-            scroller.classList.remove('cursor-grab');
+        function init() {
+            init3D();
+            initInput();
+            resize();
+            window.addEventListener('resize', resize);
+            requestAnimationFrame(loop);
+        }
 
-            pos = {
-                left: scroller.scrollLeft,
-                top: scroller.scrollTop,
-                x: e.clientX,
-                y: e.clientY,
+        function resize() {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('hudCanvas').width = window.innerWidth;
+            document.getElementById('hudCanvas').height = window.innerHeight;
+        }
+
+        function startGame() {
+            STATE.mode = 'PLAYING';
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('winScreen').style.display = 'none';
+            AudioSys.init();
+
+            player.x = CFG.mapSize/2; player.y = CFG.mapSize/2;
+            player.v=220; player.lvl=1; player.xp=0; player.nextXp=100;
+            
+            [...entities, ...bullets, ...loot, ...obstacles, ...clouds, ...cranes].forEach(e => scene.remove(e.mesh||e));
+            if(player.mesh) scene.remove(player.mesh);
+            entities=[]; bullets=[]; loot=[]; obstacles=[]; popups=[]; clouds=[]; cranes=[];
+
+            player.mesh = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 20, 16), materials.player);
+            body.position.y = 5;
+            player.mesh.add(body);
+            player.swords = [];
+            for(let i=0; i<3; i++) {
+                const s = new THREE.Mesh(new THREE.ConeGeometry(2, 12, 4), materials.sword);
+                s.geometry.rotateX(Math.PI/2);
+                const p = new THREE.Group(); p.add(s); s.position.z = 20;
+                p.rotation.y = i*(Math.PI*2/3);
+                player.mesh.add(p);
+                player.swords.push(p);
+            }
+            scene.add(player.mesh);
+
+            genEnvironment();
+            for(let i=0;i<40;i++) spawnEntity('mob');
+            for(let i=0;i<10;i++) spawnEntity('beast'); 
+            for(let i=0;i<5;i++) spawnEntity('boss');
+            for(let i=0;i<120;i++) spawnLoot();
+            spawnFinalBoss(CFG.mapSize/2, CFG.mapSize/2);
+
+            addLog("逍遥天地间，御剑乘风去。", "text-orange-500");
+        }
+
+        function loop() {
+            if(STATE.mode === 'PLAYING') {
+                update(0.016);
+                render3D();
+                renderHUD();
+            }
+            requestAnimationFrame(loop);
+        }
+
+        function update(dt) {
+            STATE.time += dt;
+            
+            clouds.forEach(c => {
+                c.mesh.position.x += c.spd;
+                if(c.mesh.position.x > CFG.mapSize) c.mesh.position.x = 0;
+            });
+            cranes.forEach(c => {
+                c.angle += c.spd * dt;
+                c.mesh.position.set(c.cx + Math.cos(c.angle)*c.r, 80, c.cy + Math.sin(c.angle)*c.r);
+                c.mesh.rotation.y = -c.angle;
+            });
+
+            if(player.mesh && player.swords) player.swords.forEach(s => s.rotation.y += dt * 3);
+
+            let moveSpd = 0;
+            let moveAngle = 0;
+            
+            if (input.moveActive) {
+                moveSpd = player.baseSpeed * input.movePower;
+                moveAngle = input.moveAngle;
+            } else if (Object.keys(input.keys).some(k=>input.keys[k])) {
+                let dx=0, dy=0;
+                if(input.keys['KeyW']) dy-=1; if(input.keys['KeyS']) dy+=1;
+                if(input.keys['KeyA']) dx-=1; if(input.keys['KeyD']) dx+=1;
+                if(dx!==0||dy!==0) {
+                    moveAngle = Math.atan2(dy, dx);
+                    moveSpd = player.baseSpeed;
+                }
+            }
+
+            const finalMoveAngle = moveAngle + input.camAngle + Math.PI/2;
+
+            moveSpd *= (1 + player.lvl * 0.05);
+            if(input.keys['ShiftLeft'] || player.skills.speed > 0) moveSpd *= 1.5;
+
+            if(moveSpd > 0.1) {
+                player.x += Math.cos(finalMoveAngle) * moveSpd;
+                player.y += Math.sin(finalMoveAngle) * moveSpd;
+                player.x = Math.max(0, Math.min(CFG.mapSize, player.x));
+                player.y = Math.max(0, Math.min(CFG.mapSize, player.y));
+                if(player.mesh) player.mesh.rotation.y = -finalMoveAngle + Math.PI/2;
+            }
+            if(player.mesh) player.mesh.position.set(player.x, 20, player.y);
+            
+            const camDist = 350;
+            const camHeight = 400;
+            const camX = player.x + Math.sin(input.camAngle) * camDist;
+            const camZ = player.y + Math.cos(input.camAngle) * camDist;
+            camera.position.x += (camX - camera.position.x) * 0.1;
+            camera.position.z += (camZ - camera.position.z) * 0.1;
+            camera.position.y = camHeight;
+            camera.lookAt(player.x, 0, player.y);
+
+            if(input.fire && player.shootCd<=0) fireSword(finalMoveAngle); 
+            if(player.shootCd>0) player.shootCd-=dt;
+
+            entities.forEach(e => {
+                if(e.type !== 'finalBoss') {
+                    if(Math.random()<0.01) { e.tx = Math.random()*CFG.mapSize; e.ty = Math.random()*CFG.mapSize; }
+                    const adx = e.tx-e.x, ady=e.ty-e.y;
+                    if(Math.hypot(adx, ady)>10) {
+                        const a = Math.atan2(ady, adx);
+                        e.x += Math.cos(a)*e.spd*0.5; e.y += Math.sin(a)*e.spd*0.5;
+                        e.mesh.rotation.y = -a + Math.PI/2;
+                    }
+                }
+                e.mesh.position.set(e.x, e.type==='finalBoss'?60:20, e.y);
+                if(Math.hypot(player.x-e.x, player.y-e.y) < (e.type==='finalBoss'?100:35)) handleCollision(e);
+            });
+
+            for(let i=loot.length-1; i>=0; i--) {
+                let l = loot[i];
+                l.mesh.rotation.y += dt;
+                l.mesh.position.y = 15 + Math.sin(STATE.time*2 + l.x)*3;
+                if(Math.hypot(player.x-l.x, player.y-l.y) < 30) {
+                    scene.remove(l.mesh); loot.splice(i,1);
+                    player.xp += 10; player.v = Math.min(player.maxV, player.v+1);
+                    AudioSys.sword();
+                }
+            }
+
+            for(let i=bullets.length-1; i>=0; i--) {
+                let b = bullets[i];
+                b.life-=dt; b.x+=Math.cos(b.a)*b.spd; b.y+=Math.sin(b.a)*b.spd;
+                b.mesh.position.set(b.x, 20, b.y);
+                let hit = false;
+                entities.forEach(e => {
+                    const hitRad = e.type==='finalBoss' ? 60 : 25;
+                    if(Math.hypot(b.x-e.x, b.y-e.y) < hitRad) { damageEntity(e, 30); hit=true; }
+                });
+                if(hit || b.life<=0) { scene.remove(b.mesh); bullets.splice(i,1); }
+            }
+
+            if(player.xp>=player.nextXp) levelUp();
+            if(player.skills.shield>0) player.skills.shield-=dt;
+            if(player.skills.speed>0) player.skills.speed-=dt;
+            if(player.ultCd>0) player.ultCd-=dt;
+            
+            popups.forEach(p => { p.y+=0.5; p.life-=dt; });
+            popups = popups.filter(p=>p.life>0);
+            
+            updateUI();
+        }
+
+        function fireSword(angle) {
+            if(player.v<5) return;
+            player.v-=3; player.shootCd=0.3;
+            AudioSys.sword();
+            const m = new THREE.Mesh(new THREE.ConeGeometry(1.5, 10, 8), materials.sword);
+            m.geometry.rotateX(Math.PI/2); 
+            const shootAng = player.mesh.rotation.y - Math.PI/2;
+            m.rotation.y = -shootAng + Math.PI/2;
+            scene.add(m);
+            bullets.push({x:player.x, y:player.y, a:shootAng, spd:30, life:1.5, mesh:m});
+        }
+        function startFire(){ input.fire=true; }
+        function stopFire(){ input.fire=false; }
+
+        function triggerUltimate() {
+            if(player.ultCd > 0) { addLog("CD中...", "text-red-500"); return; }
+            startQuiz({type:'ULT'}, true);
+        }
+
+        function activateUltEffect() {
+            AudioSys.thunder();
+            addLog("万雷天牢引！", "text-purple-600");
+            player.ultCd = 30;
+            document.body.style.backgroundColor = '#fff';
+            setTimeout(()=>document.body.style.backgroundColor = '#87CEEB', 150);
+            entities.forEach(e => { if(Math.hypot(player.x-e.x, player.y-e.y) < 800) damageEntity(e, 9999); });
+        }
+
+        function handleCollision(e) {
+            if(player.skills.shield>0) return;
+            player.x -= Math.cos(player.mesh.rotation.y - Math.PI/2)*30; 
+            player.y -= Math.sin(player.mesh.rotation.y - Math.PI/2)*30;
+            startQuiz(e, false);
+        }
+
+        let currentQuiz = null;
+        function startQuiz(target, isUlt) {
+            STATE.mode = 'QUIZ';
+            let pool = QUESTION_DB.simple;
+            let title = "斩妖";
+            if(isUlt || target.type === 'boss' || target.type === 'finalBoss') { pool = QUESTION_DB.hard; title = "渡劫"; }
+            const q = pool[Math.floor(Math.random()*pool.length)];
+            currentQuiz = { target, q, isUlt };
+            document.getElementById('quizModal').style.display = 'flex';
+            document.getElementById('quizTitle').innerText = title;
+            document.getElementById('quizQuestion').innerText = q.q;
+            const od = document.getElementById('quizOptions'); od.innerHTML='';
+            q.o.forEach((txt,i)=>{
+                const b = document.createElement('button');
+                b.className = "w-full text-left p-4 mb-2 bg-gray-50 border border-gray-300 text-gray-800 hover:bg-yellow-100 font-bold rounded shadow-sm";
+                b.innerText = txt;
+                b.onclick = ()=>endQuiz(i);
+                od.appendChild(b);
+            });
+            AudioSys.speak(q.q);
+        }
+
+        function endQuiz(i) {
+            AudioSys.stopSpeak();
+            document.getElementById('quizModal').style.display = 'none';
+            STATE.mode = 'PLAYING';
+            if(i === currentQuiz.q.a) {
+                if(currentQuiz.isUlt) activateUltEffect();
+                else { AudioSys.sword(); damageEntity(currentQuiz.target, 500); addLog("斩！", "text-green-600"); }
+            } else { player.v -= 50; addLog("受损！", "text-red-600"); }
+        }
+
+        function damageEntity(e, d) {
+            e.hp -= d;
+            popups.push({x:e.x, y:e.y, t:`-${d}`, c:'#f00', life:1});
+            if(e.hp <= 0) {
+                scene.remove(e.mesh);
+                entities = entities.filter(x=>x!==e);
+                player.xp += (e.type==='mob'?30:100);
+                if(e.type==='finalBoss') document.getElementById('winScreen').style.display='flex';
+            }
+        }
+
+        function spawnEntity(type) {
+            const x=Math.random()*CFG.mapSize, y=Math.random()*CFG.mapSize;
+            let hp=80, spd=1.5, name="心魔", mat=materials.mob, geo;
+            
+            if(type==='mob') {
+                geo=new THREE.BoxGeometry(10,10,10);
+            } else if (type==='beast') {
+                name="雷兽"; hp=150; spd=3.0; mat=materials.beast;
+                geo=new THREE.ConeGeometry(6, 15, 4); 
+            } else if (type==='boss') {
+                hp=300; spd=2.0; name="邪修"; mat=materials.boss;
+                geo=new THREE.CylinderGeometry(5,5,20,8);
+            }
+            
+            const m = new THREE.Mesh(geo, mat); 
+            if(type==='beast') { m.rotation.x = Math.PI/2; m.position.y=5; } else { m.position.y=10; }
+            scene.add(m);
+            entities.push({type, x, y, tx:x, ty:y, spd, hp, maxHp:hp, name, mesh:m});
+        }
+        function spawnFinalBoss(x,y) {
+            const m = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.IcosahedronGeometry(25, 1), materials.boss);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(40, 2, 16, 64), new THREE.MeshStandardMaterial({color:0xffd700}));
+            m.add(body, ring); scene.add(m);
+            entities.push({type:'finalBoss', x, y, tx:x, ty:y, spd:0.5, hp:2000, maxHp:2000, name:"万雷天尊", mesh:m});
+        }
+        function spawnLoot(){
+            const x=Math.random()*CFG.mapSize, y=Math.random()*CFG.mapSize;
+            const m = new THREE.Mesh(new THREE.OctahedronGeometry(5, 0), materials.loot);
+            scene.add(m); loot.push({x,y,mesh:m});
+        }
+
+        function updateUI() {
+            document.getElementById('voltageDisplay').innerText = "修为: " + Math.floor(player.v);
+            const rIdx = Math.min(Math.floor(player.lvl/5), REALMS.length-1);
+            const subLvl = player.lvl % 5 || 5;
+            document.getElementById('levelDisplay').innerText = `${REALMS[rIdx]} ${subLvl}层`;
+            
+            document.getElementById('hpBar').style.width = (player.v/player.maxV*100)+'%';
+            document.getElementById('hpText').innerText = `HP: ${Math.floor(player.v)}/${player.maxV}`;
+            
+            document.getElementById('xpBar').style.width = (player.xp/player.nextXp*100)+'%';
+            document.getElementById('xpText').innerText = `XP: ${Math.floor(player.xp)}/${player.nextXp}`;
+
+            const ultPct = player.ultCd > 0 ? (player.ultCd/30)*100 : 0;
+            document.getElementById('ultCd').style.height = ultPct+'%';
+
+            // Fix for missing skillCd visuals
+            const s1 = player.skills.shield > 0 ? (player.skills.shield/10)*100 : 0;
+            document.getElementById('skillCd1').style.height = s1+'%';
+            const s2 = player.skills.speed > 0 ? (player.skills.speed/5)*100 : 0;
+            document.getElementById('skillCd2').style.height = s2+'%';
+        }
+        function levelUp(){ player.lvl++; player.xp=0; player.nextXp*=1.5; addLog("突破！"); }
+        function addLog(m,c=''){ 
+            const d=document.createElement('div'); d.className=c; d.innerText='> '+m; 
+            document.getElementById('logArea').prepend(d); 
+        }
+        function activateSkill(s){ 
+            if(s==='shield'){ player.skills.shield=10; addLog("护体"); }
+            if(s==='speed'){ player.skills.speed=5; addLog("神行"); }
+        }
+
+        const hudCtx = document.getElementById('hudCanvas').getContext('2d');
+        const miniCtx = document.getElementById('minimapCanvas').getContext('2d');
+        function render3D() { renderer.render(scene, camera); }
+        function renderHUD() {
+            const w = hudCanvas.width, h = hudCanvas.height;
+            hudCtx.clearRect(0,0,w,h);
+            miniCtx.clearRect(0,0,100,100);
+
+            if(input.moveActive) {
+                hudCtx.beginPath(); hudCtx.arc(leftTouch.startX, leftTouch.startY, 50, 0, Math.PI*2);
+                hudCtx.strokeStyle='rgba(212, 175, 55, 0.5)'; hudCtx.lineWidth=4; hudCtx.stroke();
+                hudCtx.beginPath(); hudCtx.arc(leftTouch.curX, leftTouch.curY, 25, 0, Math.PI*2);
+                hudCtx.fillStyle='rgba(255, 215, 0, 0.5)'; hudCtx.fill();
+            }
+
+            const toScreen = (x,z) => {
+                const v = new THREE.Vector3(x,20,z).project(camera);
+                return { x: (v.x*.5+.5)*w, y: (-v.y*.5+.5)*h };
             };
 
-            document.addEventListener('mousemove', mouseMoveHandler);
-            document.addEventListener('mouseup', mouseUpHandler);
-        };
-
-        const mouseMoveHandler = function(e) {
-            const scroller = document.getElementById('pdfScroller');
-            const dx = e.clientX - pos.x;
-            const dy = e.clientY - pos.y;
-
-            scroller.scrollTop = pos.top - dy;
-            scroller.scrollLeft = pos.left - dx;
-        };
-
-        const mouseUpHandler = function() {
-            const scroller = document.getElementById('pdfScroller');
-            scroller.classList.add('cursor-grab');
-            scroller.classList.remove('cursor-grabbing');
-            
-            document.removeEventListener('mousemove', mouseMoveHandler);
-            document.removeEventListener('mouseup', mouseUpHandler);
-        };
-
-        // --- Sidebar Logic ---
-        function toggleSidebar() {
-            const sidebar = document.getElementById('mainSidebar');
-            const btn = document.getElementById('sidebarToggleBtn');
-            sidebar.classList.toggle('collapsed');
-            
-            if (sidebar.classList.contains('collapsed')) {
-                btn.classList.add('active'); 
-                btn.title = "展开侧边栏";
-            } else {
-                btn.classList.remove('active');
-                btn.title = "折叠侧边栏";
-            }
-        }
-
-        function switchSidebarTab(tabName) {
-            document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
-            document.getElementById('tab-btn-' + tabName).classList.add('active');
-            
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.getElementById('tab-' + tabName).classList.add('active');
-        }
-
-        // --- Outline (TOC) Logic ---
-        async function loadOutline() {
-            if (!pdfDoc) return;
-            const tree = document.getElementById('outlineTree');
-            tree.innerHTML = '<div class="flex items-center justify-center p-4 text-gray-500 text-xs"><i class="ph-bold ph-spinner animate-spin mr-2"></i>加载大纲...</div>';
-            
-            try {
-                // 1. Try Standard Outline
-                const outline = await pdfDoc.getOutline();
-                if (outline && outline.length > 0) {
-                    tree.innerHTML = '';
-                    await renderOutlineItems(outline, tree, 0);
-                    return;
-                }
-                
-                // 2. Fallback: Smart Heuristic Scan
-                tree.innerHTML = '<div class="flex flex-col items-center justify-center p-4 text-gray-500 text-xs text-center"><i class="ph-bold ph-scan text-xl mb-1 text-indigo-400"></i><p>无内置书签</p><p>正在智能扫描目录结构...</p></div>';
-                
-                setTimeout(async () => {
-                    const scanned = await scanPdfHeaders();
-                    if (scanned && scanned.length > 0) {
-                        tree.innerHTML = '<div class="text-xs text-gray-600 p-2 border-b border-gray-700 bg-gray-900">智能识别结果</div>';
-                        const ul = document.createElement('div');
-                        scanned.forEach(item => {
-                            const div = document.createElement('div');
-                            div.className = 'outline-item scanned';
-                            div.style.paddingLeft = '12px';
-                            div.innerHTML = `<i class="ph-fill ph-caret-right text-xs mr-2 invisible"></i><span title="${item.title}">${item.title}</span><span class="ml-auto text-xs text-gray-600">${item.page}</span>`;
-                            div.onclick = () => renderPage(item.page).then(() => {
-                                const wrapper = document.getElementById(`page-wrapper-${item.page}`);
-                                if(wrapper) {
-                                    wrapper.scrollIntoView({behavior:'smooth', block:'start'});
-                                    wrapper.classList.remove('highlight-jump');
-                                    void wrapper.offsetWidth;
-                                    wrapper.classList.add('highlight-jump');
-                                }
-                            });
-                            ul.appendChild(div);
-                        });
-                        tree.appendChild(ul);
-                    } else {
-                        tree.innerHTML = `<div class="flex flex-col items-center justify-center h-40 text-gray-500 text-xs gap-2 text-center"><i class="ph-bold ph-warning-circle text-2xl opacity-50"></i><p>未检测到有效大纲</p></div>`;
-                    }
-                }, 100);
-
-            } catch (e) {
-                console.error("Outline Error", e);
-                tree.innerHTML = '<div class="p-4 text-xs text-red-400">大纲加载失败</div>';
-            }
-        }
-
-        async function scanPdfHeaders() {
-            if(!pdfDoc) return [];
-            const results = [];
-            const numPages = Math.min(pdfDoc.numPages, 50); 
-            
-            let fontSizes = {};
-            for(let i=1; i<=Math.min(3, numPages); i++) {
-                const p = await pdfDoc.getPage(i);
-                const txt = await p.getTextContent();
-                txt.items.forEach(item => {
-                    const h = Math.round(item.transform[3]); 
-                    if(h > 0) fontSizes[h] = (fontSizes[h] || 0) + item.str.length;
-                });
-            }
-            
-            let bodySize = 0, maxCount = 0;
-            for(let size in fontSizes) {
-                if(fontSizes[size] > maxCount) { maxCount = fontSizes[size]; bodySize = parseInt(size); }
-            }
-            
-            for(let i=1; i<=numPages; i++) {
-                const p = await pdfDoc.getPage(i);
-                const txt = await p.getTextContent();
-                
-                let lines = {};
-                txt.items.forEach(item => {
-                    if(!item.str.trim()) return;
-                    const h = Math.round(item.transform[3]);
-                    const y = Math.round(item.transform[5]); 
+            // Player Floating Bar
+            if(player.mesh) {
+                const pp = toScreen(player.x, player.y);
+                if(pp.x>0 && pp.x<w && pp.y>0 && pp.y<h) {
+                    const barW = 50;
+                    const hpPct = player.v / player.maxV;
                     
-                    if (h > bodySize + 1) {
-                        if(!lines[y]) lines[y] = [];
-                        lines[y].push(item.str);
-                    }
-                });
-                
-                Object.keys(lines).sort((a,b) => b - a).forEach(y => {
-                    const text = lines[y].join(' ').trim();
-                    if(text.length > 2 && text.length < 100 && !/^\d+$/.test(text)) {
-                        results.push({ title: text, page: i });
-                    }
-                });
-            }
-            return results;
-        }
+                    hudCtx.fillStyle = '#ffd700';
+                    hudCtx.font = 'bold 12px Arial';
+                    hudCtx.textAlign = 'center';
+                    hudCtx.fillText(`HP: ${Math.floor(player.v)}`, pp.x, pp.y - 55);
 
-        async function renderOutlineItems(items, container, level) {
-            for (const item of items) {
-                const div = document.createElement('div');
-                div.className = 'outline-item';
-                div.style.paddingLeft = (12 + level * 14) + 'px'; 
-                div.innerHTML = `
-                    <i class="ph-fill ph-caret-right text-xs mr-2 ${item.items && item.items.length ? 'text-gray-500' : 'invisible'}"></i>
-                    <span title="${item.title}">${item.title}</span>
-                `;
-                
-                div.onclick = async (e) => {
-                    e.stopPropagation();
-                    if (item.dest) {
-                        await navigateToDestination(item.dest);
-                    }
-                };
-                
-                container.appendChild(div);
-
-                if (item.items && item.items.length > 0) {
-                    await renderOutlineItems(item.items, container, level + 1);
+                    hudCtx.fillStyle = '#333';
+                    hudCtx.fillRect(pp.x - barW/2, pp.y - 50, barW, 6);
+                    hudCtx.fillStyle = '#0f0'; 
+                    hudCtx.fillRect(pp.x - barW/2, pp.y - 50, barW * hpPct, 6);
+                    hudCtx.strokeStyle = '#fff';
+                    hudCtx.lineWidth = 1;
+                    hudCtx.strokeRect(pp.x - barW/2, pp.y - 50, barW, 6);
                 }
             }
-        }
 
-        async function navigateToDestination(dest) {
-            try {
-                let explicitDest = dest;
-                if (typeof dest === 'string') {
-                    explicitDest = await pdfDoc.getDestination(dest);
+            entities.forEach(e => {
+                const p = toScreen(e.x, e.y);
+                if(p.x>0 && p.x<w && p.y>0 && p.y<h) {
+                    hudCtx.fillStyle='#333'; 
+                    hudCtx.fillRect(p.x-20, p.y-35, 40, 5);
+                    
+                    hudCtx.fillStyle=e.type==='finalBoss'?'#800080':'#8b0000'; 
+                    const hpRatio = Math.max(0, e.hp/e.maxHp);
+                    hudCtx.fillRect(p.x-20, p.y-35, 40*hpRatio, 5);
+                    
+                    hudCtx.fillStyle='#fff'; 
+                    hudCtx.font='bold 10px Arial'; 
+                    hudCtx.textAlign='center';
+                    hudCtx.fillText(`${Math.floor(e.hp)}/${e.maxHp}`, p.x, p.y-40);
+                    
+                    hudCtx.fillStyle='#333'; 
+                    hudCtx.font='10px serif'; 
+                    hudCtx.fillText(e.name, p.x, p.y-22);
                 }
-                
-                if (!explicitDest) return;
-
-                const destRef = explicitDest[0];
-                let pageIndex = 0;
-                
-                if (typeof destRef === 'object' && destRef !== null) {
-                    pageIndex = await pdfDoc.getPageIndex(destRef);
-                } else if (typeof destRef === 'number') {
-                    pageIndex = destRef; 
-                }
-
-                const pageNum = pageIndex + 1;
-
-                renderPage(pageNum).then(() => {
-                    const wrapper = document.getElementById(`page-wrapper-${pageNum}`);
-                    if (wrapper) {
-                        wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        wrapper.classList.remove('highlight-jump');
-                        void wrapper.offsetWidth; 
-                        wrapper.classList.add('highlight-jump');
-                    }
-                });
-            } catch (e) {
-                console.error("Navigation failed", e);
-            }
-        }
-        
-        function refreshOutline() { loadOutline(); }
-
-        // --- Settings Logic ---
-        function loadSettings() {
-            appConfig.key = localStorage.getItem('icm_api_key') || '';
-            appConfig.baseUrl = localStorage.getItem('icm_api_base') || 'https://api.deepseek.com';
-            appConfig.fontSize = localStorage.getItem('icm_font_size') || '14';
-            appConfig.fontStyle = localStorage.getItem('icm_font_style') || 'sans';
-            applyAppearance();
-        }
-
-        function saveSettings() {
-            appConfig.key = document.getElementById('apiKey').value;
-            appConfig.baseUrl = document.getElementById('apiEndpoint').value;
-            appConfig.fontSize = document.getElementById('fontSizeSelect').value;
-            appConfig.fontStyle = document.getElementById('fontStyleSelect').value;
-            localStorage.setItem('icm_api_key', appConfig.key);
-            localStorage.setItem('icm_api_base', appConfig.baseUrl);
-            localStorage.setItem('icm_font_size', appConfig.fontSize);
-            localStorage.setItem('icm_font_style', appConfig.fontStyle);
-            applyAppearance();
-            closeSettings();
-        }
-
-        function applyAppearance() {
-            const root = document.documentElement;
-            root.style.setProperty('--content-size', `${appConfig.fontSize}px`);
-            let fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif';
-            if (appConfig.fontStyle === 'serif') fontFamily = '"Merriweather", "Georgia", "Songti SC", "SimSun", serif';
-            else if (appConfig.fontStyle === 'mono') fontFamily = '"Fira Code", "Courier New", monospace';
-            root.style.setProperty('--content-font', fontFamily);
-        }
-
-        function openSettings() {
-            document.getElementById('apiKey').value = appConfig.key;
-            document.getElementById('apiEndpoint').value = appConfig.baseUrl;
-            document.getElementById('fontSizeSelect').value = appConfig.fontSize;
-            document.getElementById('fontStyleSelect').value = appConfig.fontStyle;
-            document.getElementById('settingsModal').style.display = 'flex';
-        }
-        function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
-
-        // --- Folder Logic ---
-        function createFolder() {
-            const name = prompt("请输入文件夹名称:", "新项目");
-            if (!name) return;
-            const id = 'f-' + Date.now();
-            folders[id] = { id, name, created: Date.now() };
-            currentFolderId = id;
-            renderFolderList();
-            renderFileList();
-        }
-        function switchFolder(id) {
-            currentFolderId = id;
-            currentFileId = null; 
-            renderFolderList();
-            renderFileList();
-            const container = document.getElementById('pdfScroller');
-            container.innerHTML = `<div id="emptyState" class="w-full h-full flex flex-col items-center justify-center text-gray-500">
-                <i class="ph-duotone ph-folder-open text-6xl mb-4 opacity-50"></i>
-                <p class="mt-2">文件夹: ${folders[id].name}</p>
-                <p class="text-sm">请导入 PDF 文档开始工作</p>
-            </div>`;
-            document.getElementById('fileStatus').innerText = "未选择文件";
-        }
-        function renderFolderList() {
-            const list = document.getElementById('folderList');
-            list.innerHTML = Object.values(folders).sort((a,b) => a.created - b.created).map(f => `
-                <div class="list-item ${currentFolderId === f.id ? 'active' : ''}" onclick="switchFolder('${f.id}')">
-                    <i class="ph-fill ph-folder text-yellow-500"></i>
-                    <span class="truncate">${f.name}</span>
-                </div>
-            `).join('');
-        }
-
-        // --- File Logic ---
-        async function handleFileSelect(e) {
-            const fileList = e.target.files;
-            if(fileList.length === 0) return;
-            let lastId = null;
-            for (let i = 0; i < fileList.length; i++) {
-                const file = fileList[i];
-                const id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
-                files[id] = { id, name: file.name, file: file, folderId: currentFolderId, notes: [] }; 
-                lastId = id;
-            }
-            e.target.value = '';
-            renderFileList();
-            if (lastId) loadPDF(lastId);
-        }
-        function renderFileList() {
-            const currentFiles = Object.values(files).filter(f => f.folderId === currentFolderId);
-            const list = document.getElementById('fileList');
-            document.getElementById('analysisBar').style.display = currentFiles.length > 1 ? 'block' : 'none';
-            list.innerHTML = currentFiles.map(f => `
-                <div class="list-item ${currentFileId === f.id ? 'active' : ''}" onclick="loadPDF('${f.id}')">
-                    <i class="ph-file-pdf text-indigo-400"></i>
-                    <span class="truncate flex-1">${f.name}</span>
-                </div>
-            `).join('');
-        }
-
-        // --- Analysis & Utils ---
-        async function analyzeCurrentFolder() {
-            const currentFiles = Object.values(files).filter(f => f.folderId === currentFolderId);
-            if (currentFiles.length < 2) return alert("至少需要两个文件才能进行交叉分析。");
-            document.getElementById('analysisModal').style.display = 'flex';
-            const resultBody = document.getElementById('analysisResult');
-            resultBody.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-400 gap-3"><i class="ph-bold ph-spinner animate-spin text-4xl text-indigo-500"></i><p>正在提取 ${currentFiles.length} 篇文档的内容...</p></div>`;
-            try {
-                let combinedText = `请分析这些论文的异同点。重点关注：研究目标、方法论和关键发现。请使用 Markdown 格式并用中文回答。\n\n`;
-                for (let i = 0; i < currentFiles.length; i++) {
-                    const f = currentFiles[i];
-                    const text = await extractPdfText(f.file); 
-                    combinedText += `--- 论文 ${i+1}: ${f.name} ---\n${text.substring(0, 3000)}\n\n`;
-                }
-                resultBody.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-gray-400 gap-3"><i class="ph-bold ph-brain text-4xl text-pink-500 animate-pulse"></i><p>AI 正在对比分析中...</p></div>`;
-                const analysis = await callAI(combinedText, false); 
-                resultBody.innerHTML = marked.parse(analysis);
-            } catch (e) { resultBody.innerHTML = `<div class="text-red-500 p-4">分析失败: ${e.message}</div>`; }
-        }
-        function closeAnalysis() { document.getElementById('analysisModal').style.display = 'none'; }
-        async function extractPdfText(fileBlob) {
-            const arrayBuffer = await fileBlob.arrayBuffer();
-            const loadingTask = pdfjsLib.getDocument(arrayBuffer);
-            const doc = await loadingTask.promise;
-            let fullText = "";
-            const maxPages = Math.min(doc.numPages, 3); 
-            for (let i = 1; i <= maxPages; i++) {
-                const page = await doc.getPage(i);
-                const textContent = await page.getTextContent();
-                fullText += textContent.items.map(item => item.str).join(' ') + "\n";
-            }
-            return fullText;
-        }
-
-        // --- PDF Loader ---
-        async function loadPDF(id) {
-            if (currentFileId === id && pdfDoc) return;
-            
-            currentFileId = id;
-            renderFileList();
-            
-            const fileObj = files[id];
-            if (!fileObj) return; 
-            
-            document.getElementById('fileStatus').innerText = fileObj.name;
-            const container = document.getElementById('pdfScroller');
-            const emptyState = document.getElementById('emptyState');
-            if (emptyState) emptyState.style.display = 'none';
-            container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-gray-400 gap-2"><i class="ph-bold ph-spinner animate-spin text-3xl"></i><span>正在加载 PDF...</span></div>';
-            
-            try {
-                if (pdfLoadingTask) {
-                    try {
-                        await pdfLoadingTask.destroy();
-                    } catch (e) {
-                        console.warn("Destroy task failed", e);
-                    }
-                    pdfLoadingTask = null;
-                }
-                
-                pdfDoc = null; 
-
-                const arrayBuffer = await fileObj.file.arrayBuffer();
-                pdfLoadingTask = pdfjsLib.getDocument(arrayBuffer);
-                
-                const loadedPdf = await pdfLoadingTask.promise;
-                
-                if (currentFileId !== id) {
-                    if (loadedPdf) loadedPdf.destroy(); 
-                    return;
-                }
-                
-                pdfDoc = loadedPdf;
-                
-                loadOutline();
-                await renderAllPages(id);
-                
-            } catch (err) {
-                if (err.message && (err.message.includes('aborted') || err.message.includes('destroyed') || err.name === 'RenderingCancelledException')) {
-                    return;
-                }
-                console.error(err);
-                container.innerHTML = `<div class="text-red-500 m-auto mt-20 p-4 border border-red-500 rounded">加载 PDF 失败: ${err.message}</div>`;
-            }
-        }
-
-        async function renderAllPages(activeId) {
-            if (!activeId) activeId = currentFileId;
-            const container = document.getElementById('pdfScroller');
-            container.innerHTML = ''; 
-            
-            if (!pdfDoc) return;
-
-            for (let num = 1; num <= pdfDoc.numPages; num++) {
-                if (currentFileId !== activeId) return;
-                const wrapper = document.createElement('div');
-                wrapper.className = 'page-wrapper';
-                wrapper.id = `page-wrapper-${num}`;
-                container.appendChild(wrapper);
-                await renderPage(num, wrapper);
-                const marginDiv = document.createElement('div');
-                marginDiv.className = 'margin-column';
-                marginDiv.id = `margin-${num}`;
-                wrapper.appendChild(marginDiv);
-            }
-        }
-
-        async function renderPage(num, wrapper) {
-            try {
-                const page = await pdfDoc.getPage(num);
-                const viewport = page.getViewport({ scale: scale });
-                const pageDiv = document.createElement('div');
-                pageDiv.className = 'pdf-page-container';
-                pageDiv.style.width = `${viewport.width}px`;
-                pageDiv.style.height = `${viewport.height}px`;
-                const canvas = document.createElement('canvas');
-                canvas.className = 'pdf-canvas';
-                const outputScale = window.devicePixelRatio || 1;
-                canvas.width = Math.floor(viewport.width * outputScale);
-                canvas.height = Math.floor(viewport.height * outputScale);
-                canvas.style.width = `${viewport.width}px`;
-                canvas.style.height = `${viewport.height}px`;
-                pageDiv.appendChild(canvas);
-                const textLayerDiv = document.createElement('div');
-                textLayerDiv.className = 'textLayer';
-                textLayerDiv.style.width = `${viewport.width}px`;
-                textLayerDiv.style.height = `${viewport.height}px`;
-                textLayerDiv.style.setProperty('--scale-factor', scale);
-                pageDiv.appendChild(textLayerDiv);
-                wrapper.appendChild(pageDiv);
-                const renderContext = { canvasContext: canvas.getContext('2d'), viewport: viewport, transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null };
-                await page.render(renderContext).promise;
-                const textContent = await page.getTextContent();
-                pdfjsLib.renderTextLayer({ textContent: textContent, container: textLayerDiv, viewport: viewport, textDivs: [] });
-            } catch (e) { console.warn('Page render error:', e); }
-        }
-
-        // --- Screenshot & Notes ---
-        function startScreenshotMode() {
-            document.getElementById('aiWindow').style.opacity = '0';
-            document.getElementById('screenshotLayer').style.display = 'block';
-            document.body.style.cursor = 'crosshair';
-            document.body.classList.remove('selectable-text');
-        }
-        function endScreenshotMode() {
-            document.getElementById('aiWindow').style.opacity = '1';
-            document.getElementById('screenshotLayer').style.display = 'none';
-            document.getElementById('selectionRect').style.display = 'none';
-            document.body.style.cursor = 'default';
-            if (!isHandMode) document.body.classList.add('selectable-text');
-        }
-        let isSelecting = false, startX, startY;
-        function onScreenshotMouseDown(e) { isSelecting = true; startX = e.clientX; startY = e.clientY; const box = document.getElementById('selectionRect'); box.style.display = 'block'; box.style.left = startX+'px'; box.style.top = startY+'px'; box.style.width = '0'; box.style.height = '0'; }
-        function onScreenshotMouseMove(e) { if(!isSelecting)return; const w=Math.abs(e.clientX-startX), h=Math.abs(e.clientY-startY), l=Math.min(e.clientX,startX), t=Math.min(e.clientY,startY); const box=document.getElementById('selectionRect'); box.style.width=w+'px'; box.style.height=h+'px'; box.style.left=l+'px'; box.style.top=t+'px'; }
-        async function onScreenshotMouseUp(e) { 
-            if(!isSelecting)return; isSelecting=false; const box=document.getElementById('selectionRect'); box.style.display='none'; 
-            const rect={x:parseFloat(box.style.left),y:parseFloat(box.style.top),width:parseFloat(box.style.width),height:parseFloat(box.style.height)};
-            if(rect.width>5&&rect.height>5){
-                try{ const cvs=await html2canvas(document.body,{x:rect.x+window.scrollX,y:rect.y+window.scrollY,width:rect.width,height:rect.height,useCORS:true,ignoreElements:el=>el.id==='aiWindow'||el.id==='screenshotLayer'||el.id==='analysisModal'}); currentScreenshot=cvs.toDataURL('image/jpeg',0.8); document.getElementById('screenshotPreviewBox').style.display='inline-block'; document.getElementById('screenshotThumb').src=currentScreenshot; }catch(e){console.error(e);}
-            } endScreenshotMode();
-        }
-        function checkSelection(e) {
-            if(isHandMode) return; // 手型模式下禁用选区检测
-            if(document.getElementById('screenshotLayer').style.display==='block')return;
-            const sel=window.getSelection(); const tb=document.getElementById('selectionToolbar'); const wrap=sel.anchorNode?.parentElement?.closest('.page-wrapper');
-            if(sel.toString().trim().length>0 && wrap){
-                const r=sel.getRangeAt(0).getBoundingClientRect(); tb.style.display='flex'; tb.style.top=`${Math.max(10,r.top-45)}px`; tb.style.left=`${Math.max(10,r.left)}px`;
-                tb.dataset.pageNum=wrap.id.split('-')[2]; tb.dataset.relativeTop=r.top-wrap.getBoundingClientRect().top; tb.dataset.text=sel.toString().trim();
-            } else { tb.style.display='none'; }
-        }
-        async function createMarginNote(type) {
-            const tb=document.getElementById('selectionToolbar'); tb.style.display='none';
-            const col=document.getElementById(`margin-${tb.dataset.pageNum}`); if(!col)return;
-            const cd=document.createElement('div'); cd.className='note-card'; 
-            const kids=Array.from(col.children); let t=parseFloat(tb.dataset.relativeTop);
-            if(kids.length>0){ const last=kids[kids.length-1]; const lb=last.offsetTop+last.offsetHeight+10; if(t<lb)t=lb; }
-            cd.style.top=t+'px'; cd.innerHTML=`<div class="note-close" onclick="this.parentElement.remove()">×</div><div class="text-xs font-bold text-indigo-400 mb-1">${type==='translate'?'翻译':'解释'}</div><div class="note-content loading-dots">思考中</div>`;
-            col.appendChild(cd);
-            try{ const res=await callAI(type==='translate'?"请将以下内容翻译成中文（保留 LaTeX 公式）：\n"+tb.dataset.text:"请用中文通俗解释以下内容：\n"+tb.dataset.text); const c=cd.querySelector('.note-content'); c.innerHTML=marked.parse(res); c.classList.remove('loading-dots'); MathJax.typesetPromise([cd]); }catch(e){ cd.querySelector('.note-content').innerText="错误: "+e.message; }
-        }
-
-        // --- Chat & AI ---
-        async function sendMessage() {
-            const i=document.getElementById('chatInput'); const t=i.value.trim(); if(!t&&!currentScreenshot)return;
-            appendMessage('user',t,currentScreenshot); i.value=''; let p=t; if(currentScreenshot)p+="\n[包含截图]"; clearScreenshot();
-            chatHistory.push({role:'user',content:p}); const lid=appendMessage('ai','<span class="loading-dots">思考中</span>');
-            try{ const r=await callAI(p,true); updateMessage(lid,r); chatHistory.push({role:'assistant',content:r}); }catch(e){ updateMessage(lid,"错误: "+e.message); }
-        }
-        async function callAI(p,h=false) {
-            if(!appConfig.key) throw new Error("缺少 API Key，请检查设置。");
-            let messages = h ? chatHistory : [{role:'user', content: p}];
-            if(!h) messages = [{role:'user', content: p}]; 
-            const baseUrl = appConfig.baseUrl.replace(/\/$/, "");
-            const res = await fetch(`${baseUrl}/chat/completions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${appConfig.key}` },
-                body: JSON.stringify({ model: appConfig.model, messages: messages, temperature: 0.7 })
+                miniCtx.fillStyle='#f00'; miniCtx.fillRect(e.x/CFG.mapSize*100-1, e.y/CFG.mapSize*100-1, 2,2);
             });
-            if (!res.ok) { const errData = await res.json().catch(() => ({})); throw new Error(errData.error?.message || `API Error ${res.status}`); }
-            const data = await res.json();
-            return data.choices[0].message.content;
+            miniCtx.fillStyle='#0ff'; miniCtx.beginPath(); miniCtx.arc(player.x/CFG.mapSize*100, player.y/CFG.mapSize*100, 3, 0, Math.PI*2); miniCtx.fill();
+
+            popups.forEach(p => {
+                const sp = toScreen(p.x, p.y);
+                hudCtx.fillStyle = p.c; hudCtx.font='bold 16px serif'; hudCtx.fillText(p.t, sp.x, sp.y);
+            });
         }
 
-        function toggleAI() { document.getElementById('aiWindow').classList.toggle('active'); }
-        function takeScreenshot() { startScreenshotMode(); }
-        function clearScreenshot() { currentScreenshot = null; document.getElementById('screenshotPreviewBox').style.display = 'none'; }
-        function clearChat() { document.getElementById('chatMessages').innerHTML = ''; chatHistory=[{ role: "system", content: "你是我的学术研究助手。请用中文回答所有问题。" }]; }
-        
-        function appendMessage(role, text, img) {
-            const box = document.getElementById('chatMessages');
-            const div = document.createElement('div');
-            div.className = `chat-msg ${role}`;
-            div.id = `msg-${Date.now()}`;
-            if(img) div.innerHTML += `<img src="${img}" class="chat-img-preview">`;
-            div.innerHTML += `<div class="md-content">${marked.parse(text||'')}</div>`;
-            box.appendChild(div); box.scrollTop = box.scrollHeight;
-            return div.id;
-        }
-        
-        function updateMessage(id, text) { 
-            const el = document.getElementById(id);
-            if(el) el.querySelector('.md-content').innerHTML = marked.parse(text); 
-        }
-
-        function makeDraggable(el, h) {
-            let p1=0,p2=0,p3=0,p4=0;
-            h.onmousedown = e => { e.preventDefault(); p3=e.clientX; p4=e.clientY; document.onmouseup=close; document.onmousemove=drag; };
-            function drag(e) { e.preventDefault(); p1=p3-e.clientX; p2=p4-e.clientY; p3=e.clientX; p4=e.clientY; el.style.top=(el.offsetTop-p2)+"px"; el.style.left=(el.offsetLeft-p1)+"px"; el.style.bottom='auto'; el.style.right='auto'; }
-            function close() { document.onmouseup=null; document.onmousemove=null; }
-        }
-
-        async function changeZoom(d) { 
-            if (!pdfDoc) return;
-            const newScale = parseFloat((scale + d).toFixed(1)); 
-            if (newScale === scale) return; 
-            scale = Math.max(0.6, Math.min(3.0, newScale)); 
-            updateZoomDisplay(); 
-            const container = document.getElementById('pdfScroller');
-            const scrollRatio = container.scrollTop / (container.scrollHeight || 1);
-            await renderAllPages();
-            if (container.scrollHeight > 0) container.scrollTop = scrollRatio * container.scrollHeight;
-        }
-        
-        function updateZoomDisplay() { document.getElementById('zoomLevel').innerText = Math.round(scale*100)+'%'; }
+        init();
     </script>
 </body>
 </html>
