@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>VIVID WORLD: PERFECT CONTROL</title>
+    <title>VIVID WORLD: INTERACTIVE</title>
     <style>
         /* --- 核心基础 --- */
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
@@ -177,7 +177,7 @@
 
     <div id="blocker">
         <div id="instructions">
-            <h1>VIVID WORLD // V4.2 ULTRA</h1>
+            <h1>VIVID WORLD // V4.3 INTERACT</h1>
             <p style="font-size:12px; color:#aaa;">接入 Gemini 矩阵以激活完全智能</p>
             <div style="height: 1px; background: #005566; margin: 15px 0;"></div>
             
@@ -186,7 +186,7 @@
             
             <button class="start-btn" id="start-game-btn">接入系统</button>
             
-            <p style="font-size: 12px; color: #666; margin-top: 15px;">摇杆完美校准 · 极速驾驶 · 反重力飞行</p>
+            <p style="font-size: 12px; color: #666; margin-top: 15px;">智能注视 · 自动驻足 · 语境感知</p>
         </div>
     </div>
 
@@ -337,6 +337,14 @@
 
         // --- 知识库 ---
         const npcDialogues = ["如果你去市中心，记得带伞。", "最近的芯片价格又涨了。", "听说第七区昨晚有非法赛车。", "我得赶在天黑前回家。", "这城市的霓虹灯看久了眼睛疼。", "你是新来的吗？装备不错。"];
+        
+        // 情境化问候语
+        const smartGreetings = {
+            walk: ["嗨，走路锻炼身体吗？", "这附近很安全，放心逛。", "当心脚下的积水。", "你看上去迷路了？", "借过一下。", "今天天气不错。"],
+            car: ["哇，好酷的车！", "嘿！注意限速！", "这引擎声真带劲。", "能带我兜一圈吗？", "小心别撞到人！", "这车是最新款吗？"],
+            plane: ["天哪，那是反重力装置吗？", "飞这么低很危险！", "带我飞！", "上面空气怎么样？", "快看，那是钢铁侠吗？", "别掉下来砸到我！"]
+        };
+
         const localKnowledge = {
             "谁": "我是 ECHO，战术辅助单元。", "你好": "系统在线。随时待命。", "default": ["我在听。", "信号正常。", "请指示。", "分析周围环境中..."]
         };
@@ -994,8 +1002,10 @@
 
                 group.position.set((Math.random()-0.5)*300, 0, (Math.random()-0.5)*300);
                 group.userData = { 
-                    isNPC: true, height: 1.8, id: Math.floor(Math.random()*9000)+1000, lastTalkTime: 0,
-                    limbs: { gArmL, gArmR, gLegL, gLegR }
+                    isNPC: true, height: 1.8, id: Math.floor(Math.random()*9000)+1000, 
+                    lastTalkTime: 0, lastGreetingTime: 0,
+                    limbs: { gArmL, gArmR, gLegL, gLegR },
+                    isStopped: false 
                 };
                 
                 scene.add(group); 
@@ -1007,27 +1017,67 @@
         function updateNPCs(dt) {
             const now = Date.now();
             npcs.forEach((n, idx) => {
-                n.timer += dt; 
-                if(n.timer > 3) { if(Math.random()>0.5) n.dir += (Math.random()-0.5)*2; n.timer=0; }
-                
-                const dx = Math.sin(n.dir) * n.speed * dt;
-                const dz = Math.cos(n.dir) * n.speed * dt;
-                n.mesh.position.x += dx; 
-                n.mesh.position.z += dz; 
-                n.mesh.rotation.y = n.dir;
+                // --- 社交距离检测 ---
+                const distToPlayer = n.mesh.position.distanceTo(playerBody.position);
+                const isClose = distToPlayer < 8; // 8米内触发
 
-                const h = getTerrainHeight(n.mesh.position.x, n.mesh.position.z);
-                n.mesh.position.y = h;
+                if (isClose) {
+                    // 1. 停下来
+                    n.mesh.userData.isStopped = true;
 
-                const timeScale = now * 0.005 * n.speed;
-                const limbs = n.mesh.userData.limbs;
-                
-                limbs.gLegL.rotation.x = Math.sin(timeScale) * 0.6;
-                limbs.gLegR.rotation.x = Math.sin(timeScale + Math.PI) * 0.6;
-                limbs.gArmL.rotation.x = Math.sin(timeScale + Math.PI) * 0.6; 
-                limbs.gArmR.rotation.x = Math.sin(timeScale) * 0.6;
+                    // 2. 转身面向玩家
+                    const targetPos = new THREE.Vector3(playerBody.position.x, n.mesh.position.y, playerBody.position.z);
+                    n.mesh.lookAt(targetPos);
 
-                if (idx % 5 === 0 && now - n.mesh.userData.lastTalkTime > 8000) { 
+                    // 3. 主动搭讪 (情境感知)
+                    if (now - n.mesh.userData.lastGreetingTime > 15000) { // 15秒冷却
+                        const category = currentVehicle; // walk, car, plane
+                        const phrases = smartGreetings[category] || smartGreetings['walk'];
+                        const text = phrases[Math.floor(Math.random() * phrases.length)];
+                        
+                        npcSpeak(n.mesh, text);
+                        n.mesh.userData.lastGreetingTime = now;
+                        
+                        // 自动设为当前交互目标
+                        if(!chatTarget) setChatTarget(n.mesh);
+                    }
+                } else {
+                    // 远离后恢复行走
+                    n.mesh.userData.isStopped = false;
+                }
+
+                // --- 移动逻辑 (仅当未停下时) ---
+                if (!n.mesh.userData.isStopped) {
+                    n.timer += dt; 
+                    if(n.timer > 3) { if(Math.random()>0.5) n.dir += (Math.random()-0.5)*2; n.timer=0; }
+                    
+                    const dx = Math.sin(n.dir) * n.speed * dt;
+                    const dz = Math.cos(n.dir) * n.speed * dt;
+                    n.mesh.position.x += dx; 
+                    n.mesh.position.z += dz; 
+                    n.mesh.rotation.y = n.dir;
+
+                    const h = getTerrainHeight(n.mesh.position.x, n.mesh.position.z);
+                    n.mesh.position.y = h;
+
+                    // 走路动画
+                    const timeScale = now * 0.005 * n.speed;
+                    const limbs = n.mesh.userData.limbs;
+                    limbs.gLegL.rotation.x = Math.sin(timeScale) * 0.6;
+                    limbs.gLegR.rotation.x = Math.sin(timeScale + Math.PI) * 0.6;
+                    limbs.gArmL.rotation.x = Math.sin(timeScale + Math.PI) * 0.6; 
+                    limbs.gArmR.rotation.x = Math.sin(timeScale) * 0.6;
+                } else {
+                    // 站立动画 (呼吸)
+                    const limbs = n.mesh.userData.limbs;
+                    limbs.gLegL.rotation.x = THREE.MathUtils.lerp(limbs.gLegL.rotation.x, 0, 0.1);
+                    limbs.gLegR.rotation.x = THREE.MathUtils.lerp(limbs.gLegR.rotation.x, 0, 0.1);
+                    limbs.gArmL.rotation.x = THREE.MathUtils.lerp(limbs.gArmL.rotation.x, 0, 0.1);
+                    limbs.gArmR.rotation.x = THREE.MathUtils.lerp(limbs.gArmR.rotation.x, 0, 0.1);
+                }
+
+                // --- NPC 间互聊逻辑 ---
+                if (idx % 5 === 0 && now - n.mesh.userData.lastTalkTime > 8000 && !isClose) { 
                     for (let other of npcs) {
                         if (other === n) continue;
                         if (n.mesh.position.distanceToSquared(other.mesh.position) < 25) { 
@@ -1036,9 +1086,6 @@
                                 npcSpeak(n.mesh, talk);
                                 n.mesh.userData.lastTalkTime = now;
                                 other.mesh.userData.lastTalkTime = now + 2000; 
-                                if(Math.random() < 0.2 && aiDrone.mesh.position.distanceTo(n.mesh.position) < 30) {
-                                    setTimeout(()=> aiSpeak(`检测到市民交流。话题分析：${["天气","经济","非法活动"][Math.floor(Math.random()*3)]}`), 2000);
-                                }
                                 break; 
                              }
                         }
