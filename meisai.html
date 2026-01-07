@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>VIVID WORLD: SOCIAL CONNECT</title>
+    <title>VIVID WORLD: ANIMATED</title>
     <style>
         /* --- 核心基础 --- */
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
@@ -21,8 +21,7 @@
         .hud-item { margin-bottom: 5px; font-size: 16px; display: flex; align-items: center; }
         .vehicle-icon { font-size: 20px; margin-right: 10px; width: 25px; text-align: center; }
         .status-ok { color: #00ff00; }
-        .status-busy { color: #ffaa00; }
-
+        
         /* --- 动态气泡 --- */
         .chat-bubble {
             position: absolute; background: rgba(0, 20, 30, 0.9); border: 1px solid #00f0ff; color: #00f0ff;
@@ -36,7 +35,6 @@
         }
         .chat-bubble.npc { border-color: #ffaa00; color: #ffaa00; box-shadow: 0 0 10px rgba(255, 170, 0, 0.3); z-index: 14; }
         .chat-bubble.npc::after { border-color: #ffaa00 transparent transparent transparent; }
-        
         .chat-bubble.user { border-color: #ffffff; color: #ffffff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.3); z-index: 16; }
         .chat-bubble.user::after { border-color: #ffffff transparent transparent transparent; }
 
@@ -54,6 +52,7 @@
             border-radius: 50%; background: rgba(0, 240, 255, 0.8); box-shadow: 0 0 15px #00f0ff; pointer-events: none;
         }
         #camera-zone { position: absolute; top: 0; right: 0; width: 50%; height: 100%; z-index: 29; pointer-events: auto; }
+        
         #action-zone { position: absolute; bottom: 30px; right: 30px; display: flex; gap: 15px; align-items: flex-end; pointer-events: auto; }
         .action-btn {
             width: 65px; height: 65px; border-radius: 50%; background: rgba(0, 0, 0, 0.4);
@@ -61,8 +60,14 @@
             font-size: 24px; backdrop-filter: blur(5px); transition: all 0.1s;
         }
         .action-btn:active { transform: scale(0.9); background: rgba(0, 240, 255, 0.4); border-color: #00f0ff; }
-        .action-btn.main-action { width: 85px; height: 85px; border-color: #ff3366; background: rgba(40, 10, 20, 0.5); }
-        .action-btn.main-action:active { background: #ff3366; }
+        
+        /* 不同的按钮样式 */
+        #btn-fly { border-color: #ff3366; background: rgba(40, 10, 20, 0.5); width: 80px; height: 80px; font-size: 32px; }
+        #btn-fly:active { background: #ff3366; }
+        #btn-car { border-color: #ffff00; background: rgba(40, 40, 10, 0.5); }
+        #btn-car:active { background: #ffff00; color: #000; }
+        #btn-walk { border-color: #00ff00; background: rgba(10, 40, 10, 0.5); display: none; } /* 默认隐藏步行，只有在驾驶时显示 */
+        #btn-walk:active { background: #00ff00; color: #000; }
 
         /* --- 交互提示 --- */
         #interaction-prompt {
@@ -146,8 +151,9 @@
         <div id="camera-zone"></div>
         <div id="action-zone">
             <div class="action-btn" id="btn-interact" style="display:none;">💬</div>
+            <div class="action-btn" id="btn-walk">🏃</div>
             <div class="action-btn" id="btn-car">🏎️</div>
-            <div class="action-btn main-action" id="btn-jump">🚀</div>
+            <div class="action-btn" id="btn-fly">🚀</div>
         </div>
     </div>
 
@@ -163,16 +169,16 @@
 
     <div id="blocker">
         <div id="instructions">
-            <h1>NEURAL LINK // V3.2 SOCIAL</h1>
+            <h1>VIVID WORLD // V4.0 LIVE</h1>
             <p style="font-size:12px; color:#aaa;">接入 Gemini 矩阵以激活完全智能</p>
             <div style="height: 1px; background: #005566; margin: 15px 0;"></div>
             
             <input type="password" id="api-key-input" class="api-input" placeholder="输入 Google API Key (可选)">
-            <p style="font-size: 10px; color: #666; margin-top:-10px; margin-bottom: 20px;">*留空则使用本地模拟模式 (支持基本对话)</p>
+            <p style="font-size: 10px; color: #666; margin-top:-10px; margin-bottom: 20px;">*留空则使用本地模拟模式</p>
             
             <button class="start-btn" id="start-game-btn">接入系统</button>
             
-            <p style="font-size: 12px; color: #666; margin-top: 15px;">全城漫游 · 空间音频 · 智能社交</p>
+            <p style="font-size: 12px; color: #666; margin-top: 15px;">全城漫游 · 空间音频 · 智能社交 · 真实动作</p>
         </div>
     </div>
 
@@ -196,7 +202,7 @@
         let lastTime = 0;
         let yawObject, pitchObject;
         let apiKey = ""; 
-        let chatTarget = null; // null = AI, object = NPC
+        let chatTarget = null; 
         let chatTargetTimer = 0;
         
         // --- 游戏状态 ---
@@ -205,8 +211,8 @@
         let currentVehicle = 'walk';
         const vehicleSettings = {
             walk: { speed: 12, jump: 8, height: 1.7, fly: false, damping: 0.1, icon: '🏃', name: '步行' },
-            car:  { speed: 50, jump: 2, height: 1.2, fly: false, damping: 0.2, icon: '🏎️', name: '跑车' },
-            plane: { speed: 120, jump: 20, height: 5.0, fly: true, damping: 0.5, icon: '✈️', name: '战机' }
+            car:  { speed: 60, jump: 2, height: 1.2, fly: false, damping: 0.2, icon: '🏎️', name: '跑车' },
+            plane: { speed: 150, jump: 20, height: 5.0, fly: true, damping: 0.5, icon: '✈️', name: '战机' }
         };
 
         // --- 资源与对象 ---
@@ -221,13 +227,12 @@
         const ui = {};
         let raycaster = new THREE.Raycaster();
 
-        // --- 🔊 增强音效引擎 ---
+        // --- 🔊 音效系统 ---
         class SoundFX {
             constructor() {
                 this.ctx = null;
                 this.footstepTimer = 0;
                 this.masterGain = null;
-                this.carSources = [];
             }
             init() {
                 if (this.ctx) return;
@@ -251,7 +256,6 @@
             playFootstep(interval) {
                 if(!this.ctx || currentVehicle !== 'walk') return;
                 if(this.ctx.currentTime > this.footstepTimer) {
-                    // 模拟脚步声: 短促的低频噪音
                     this.playTone(100 + Math.random()*50, 'triangle', 0.05, 0.2);
                     this.footstepTimer = this.ctx.currentTime + interval;
                 }
@@ -259,19 +263,27 @@
 
             playChatBlip(isAI) {
                 if(!this.ctx) return;
-                if(isAI) { // 科技感 AI 声音
+                if(isAI) { 
                     this.playTone(800, 'sine', 0.1, 0.1);
                     this.playTone(1200, 'sine', 0.1, 0.1, 0.1);
-                } else { // 柔和 NPC 声音
+                } else { 
                     this.playTone(400 + Math.random()*200, 'sine', 0.15, 0.1);
                 }
+            }
+            playEngineStart() {
+                this.playTone(100, 'sawtooth', 0.5, 0.3);
+                this.playTone(200, 'sawtooth', 0.8, 0.2, 0.2);
+            }
+            playRocketLaunch() {
+                this.playTone(50, 'square', 1.0, 0.5);
+                this.playTone(150, 'sawtooth', 2.0, 0.2);
             }
 
             playInteract() { this.playTone(600, 'square', 0.1, 0.05); }
         }
         const sfx = new SoundFX();
 
-        // --- 空间音频 (车辆) ---
+        // --- 空间音频 ---
         class SpatialAudioEngine {
             constructor() { this.carPool = []; this.maxSources = 6; }
             init() {
@@ -304,17 +316,14 @@
         }
         const spatialAudio = new SpatialAudioEngine();
 
-        // --- 知识库 & 闲聊 ---
+        // --- 知识库 ---
         const npcDialogues = [
             "如果你去市中心，记得带伞。", "最近的芯片价格又涨了。", "听说第七区昨晚有非法赛车。", "我得赶在天黑前回家。", 
-            "这城市的霓虹灯看久了眼睛疼。", "你是新来的吗？装备不错。", "别挡路，我在赶时间。", "嘿，刚才那辆车飞得真低！",
-            "你有备用电池吗？", "天气预报说今晚有酸雨。"
+            "这城市的霓虹灯看久了眼睛疼。", "你是新来的吗？装备不错。", "别挡路，我在赶时间。", "嘿，刚才那辆车飞得真低！"
         ];
-        
         const localKnowledge = {
             "谁": "我是 ECHO，战术辅助单元。",
             "你好": "系统在线。随时待命。",
-            "干什么": "驾驶、飞行，或与市民互动。",
             "default": ["我在听。", "信号正常。", "请指示。", "分析周围环境中..."]
         };
 
@@ -329,6 +338,9 @@
             ui.bubbles = document.getElementById('bubble-container');
             ui.targetInd = document.getElementById('target-indicator');
             ui.targetId = document.getElementById('target-id');
+            ui.btnWalk = document.getElementById('btn-walk');
+            ui.btnCar = document.getElementById('btn-car');
+            ui.btnFly = document.getElementById('btn-fly');
 
             document.getElementById('start-game-btn').addEventListener('click', startGame);
             
@@ -351,9 +363,9 @@
                 apiKey = keyInput;
                 ui.aiStatus.innerText = "在线";
                 ui.aiStatus.className = "status-ok";
-                addLog("Gemini API 已接入。社交模块加载完毕...", false);
+                addLog("Gemini API 已接入。", false);
             } else {
-                addLog("离线模式。启用本地社交模拟协议。", false);
+                addLog("离线模式启动。", false);
             }
 
             document.getElementById('blocker').style.display = 'none';
@@ -361,19 +373,17 @@
             try { if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{}); } catch(e){}
             
             sfx.init(); sfx.resume(); spatialAudio.init();
-            setTimeout(() => aiSpeak(apiKey ? "网络连接正常。我是 ECHO，您可以与我或路人交谈。" : "离线系统启动。路人交互协议已激活。"), 1000);
+            setTimeout(() => aiSpeak("系统就绪。点击 🏎️ 驾驶，点击 🚀 飞行。"), 1000);
         }
 
-        // --- 逻辑整合: 场景与城市 ---
+        // --- 场景 ---
         function initWorld() {
-            // 灯光
             ambientLight = new THREE.AmbientLight(0xffffff, 0.4); scene.add(ambientLight);
             sunLight = new THREE.DirectionalLight(0xffffff, 1.2); sunLight.castShadow = true;
             sunLight.shadow.mapSize.set(1024,1024); sunLight.shadow.camera.top=500; sunLight.shadow.camera.bottom=-500; sunLight.shadow.camera.left=-500; sunLight.shadow.camera.right=500;
             scene.add(sunLight);
             sunMesh = new THREE.Mesh(new THREE.SphereGeometry(30), new THREE.MeshBasicMaterial({color:0xffaa00})); scene.add(sunMesh);
 
-            // 天气粒子
             const geo = new THREE.BufferGeometry();
             const pos = []; for(let i=0; i<8000; i++) pos.push((Math.random()-0.5)*1000, Math.random()*200, (Math.random()-0.5)*1000);
             geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -383,12 +393,11 @@
             initTerrain();
             initCity();
             initTraffic(60); 
-            initNPCs(50);
+            initRealNPCs(50); // 使用新的真实NPC生成器
         }
 
         function initTerrain() {
             if(terrainMesh) scene.remove(terrainMesh); if(terrainBody) world.removeBody(terrainBody);
-            // 地形生成逻辑 (山谷/平原)
             const sz = 2000;
             const geo = new THREE.PlaneGeometry(sz, sz, 64, 64); geo.rotateX(-Math.PI/2);
             const pos = geo.attributes.position;
@@ -415,11 +424,8 @@
             visualMeshes.forEach(m=>scene.remove(m)); visualMeshes.length=0; interactables.length=0;
             roadData = [];
             const OVERPASS_Z = -200;
-
-            // 1. 高架桥
             createBridgeSegment(-1000, OVERPASS_Z, 2000, 30, 'x', 30);
 
-            // 2. 地面路网
             const gridSpacing = 120, segmentLen = 40;
             for(let z = -800; z <= 800; z += gridSpacing) {
                 roadData.push({type:'x', z:z});
@@ -438,7 +444,6 @@
             }
             createRamp();
 
-            // 4. 建筑
             const boxGeo = new THREE.BoxGeometry(1,1,1);
             for(let i=0; i<300; i++) {
                 const x = (Math.random()-0.5)*1400, z = (Math.random()-0.5)*1400;
@@ -452,13 +457,12 @@
                 const mesh = new THREE.Mesh(boxGeo, mat);
                 mesh.position.set(x, y+h/2-5, z); mesh.scale.set(w, h, w);
                 
-                const uv = mesh.geometry.attributes.uv; 
                 mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh); visualMeshes.push(mesh);
                 const body = new CANNON.Body({mass:0}); body.addShape(new CANNON.Box(new CANNON.Vec3(w/2, h/2, w/2)), new CANNON.Vec3(x, y+h/2-5, z)); world.addBody(body);
             }
         }
 
-        // --- 城市组件生成器 ---
+        // --- 纹理与组件 ---
         function createRoadTextures() {
             const c = document.createElement('canvas'); c.width=512; c.height=512; const ctx=c.getContext('2d');
             ctx.fillStyle='#181818'; ctx.fillRect(0,0,512,512); ctx.fillStyle='#fff';
@@ -555,7 +559,6 @@
             });
         }
 
-        // --- 🤖 AI & 社交系统 ---
         function initAI_Upgraded() {
             const g = new THREE.Group();
             const core = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 2}));
@@ -574,32 +577,22 @@
             aiDrone.ring1.rotation.y += dt * 2; aiDrone.ring2.rotation.x += dt * 2; aiDrone.shell.rotation.z -= dt * 0.5;
             aiDrone.core.material.emissiveIntensity = 1.5 + Math.sin(Date.now() * 0.005) * 0.5;
             
-            // 检查目标是否过期
             if(chatTarget) {
                 chatTargetTimer -= dt;
                 const dist = chatTarget.position.distanceTo(yawObject.position);
-                if(chatTargetTimer <= 0 || dist > 20) {
-                    setChatTarget(null);
-                }
+                if(chatTargetTimer <= 0 || dist > 20) setChatTarget(null);
             }
         }
 
         async function processCommand(cmd) {
-            // 如果有锁定的NPC，则与NPC对话
             if (chatTarget) {
                 addLog(`(对市民 #${chatTarget.userData.id}): ${cmd}`, true);
-                showBubble(playerBody, cmd, 'user'); // 显示玩家气泡
-                
-                // 简单的NPC响应逻辑
+                showBubble(playerBody, cmd, 'user');
                 setTimeout(() => {
                     let reply = "";
                     if(apiKey) {
-                        // TODO: 可以接入API让NPC更有智能，这里为了响应速度先用简单逻辑或复用API
-                        fetchAIResponse(cmd, `你是一个赛博朋克世界的普通市民，ID为${chatTarget.userData.id}。请用简短的口语回答路人：${cmd}`, (text) => {
-                            npcSpeak(chatTarget, text);
-                        });
+                        fetchAIResponse(cmd, `你是一个赛博朋克世界的普通市民，ID为${chatTarget.userData.id}。请用简短的口语回答路人：${cmd}`, (text) => npcSpeak(chatTarget, text));
                     } else {
-                        // 离线 NPC 回复
                         const responses = ["嗯？你说什么？", "别烦我。", "这很有趣。", "我也觉得。", "小心点。", "你是谁？"];
                         reply = responses[Math.floor(Math.random() * responses.length)];
                         npcSpeak(chatTarget, reply);
@@ -608,17 +601,14 @@
                 return;
             }
 
-            // 否则与 ECHO 对话
             addLog(cmd, true); 
             const lowerCmd = cmd.toLowerCase();
             
-            // 系统指令
-            if(lowerCmd.includes('车')) { switchVehicle('car'); aiSpeak("载具切换：跑车"); return; }
-            if(lowerCmd.includes('飞')) { switchVehicle('plane'); aiSpeak("载具切换：战机"); return; }
-            if(lowerCmd.includes('走')) { switchVehicle('walk'); aiSpeak("载具切换：步行"); return; }
+            if(lowerCmd.includes('车')) { switchVehicle('car'); return; }
+            if(lowerCmd.includes('飞')) { switchVehicle('plane'); return; }
+            if(lowerCmd.includes('走')) { switchVehicle('walk'); return; }
             if(lowerCmd.includes('下雨')) { weatherParticles.visible = true; aiSpeak("环境模拟：降雨"); return; }
 
-            // AI 回复
             if(apiKey) {
                 fetchAIResponse(cmd, `你是一个赛博朋克世界的战术AI助手，名字叫ECHO。请用简短、冷酷、科技感的语气回答操作员的话：${cmd}`, (text) => aiSpeak(text));
             } else {
@@ -653,7 +643,6 @@
         function npcSpeak(npc, text) {
             showBubble(npc, text, 'npc');
             sfx.playChatBlip(false);
-            // AI 可能会插嘴
             if(Math.random() > 0.7) {
                 setTimeout(() => aiSpeak(`分析对象情绪: ${["平静","激动","困惑"][Math.floor(Math.random()*3)]}`), 2000);
             }
@@ -663,13 +652,9 @@
             if(!obj) return;
             const b = document.createElement('div'); b.className = `chat-bubble ${type}`; b.innerText = text;
             ui.bubbles.appendChild(b);
-            // 如果是玩家，位置稍微偏高
             const heightOffset = type === 'user' ? 2.0 : ((obj.userData && obj.userData.height)||0.5)+0.5;
-            
-            // 玩家气泡特殊处理：如果是cannon body需要获取位置
             let targetObj = obj;
             if (type === 'user') targetObj = { position: new THREE.Vector3(playerBody.position.x, playerBody.position.y, playerBody.position.z), userData: {height: 1.7} };
-
             activeBubbles.push({ dom: b, obj: targetObj, life: 4.0, offset: heightOffset });
             requestAnimationFrame(()=>b.style.opacity='1');
         }
@@ -678,27 +663,21 @@
             for(let i=activeBubbles.length-1; i>=0; i--) {
                 const b = activeBubbles[i]; b.life-=dt;
                 if(b.life<=0) { b.dom.style.opacity='0'; setTimeout(()=>b.dom.remove(),300); activeBubbles.splice(i,1); continue; }
-                
                 let pos;
-                if(b.obj.position instanceof THREE.Vector3) pos = b.obj.position.clone(); // Mesh
-                else pos = new THREE.Vector3(b.obj.position.x, b.obj.position.y, b.obj.position.z); // Body-like
-
+                if(b.obj.position instanceof THREE.Vector3) pos = b.obj.position.clone(); 
+                else pos = new THREE.Vector3(b.obj.position.x, b.obj.position.y, b.obj.position.z);
                 pos.add(new THREE.Vector3(0, b.offset, 0));
                 pos.project(camera);
-                
                 const x = (pos.x * .5 + .5) * window.innerWidth;
                 const y = (-(pos.y * .5) + .5) * window.innerHeight;
-                
                 if(pos.z>1 || Math.abs(pos.x)>1.1 || Math.abs(pos.y)>1.1) b.dom.style.display='none';
                 else { b.dom.style.display='block'; b.dom.style.left=`${x}px`; b.dom.style.top=`${y}px`; }
             }
         }
 
-        // --- 基础初始化 ---
         function initThree() {
             scene = new THREE.Scene(); scene.background = new THREE.Color(0x050510); 
             fog = new THREE.FogExp2(0x050510, 0.002); scene.fog = fog;
-            
             camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 4000);
             pitchObject = new THREE.Object3D(); pitchObject.add(camera);
             yawObject = new THREE.Object3D(); yawObject.position.y = 2; yawObject.add(pitchObject);
@@ -715,14 +694,13 @@
             playerBody.addShape(new CANNON.Sphere(1)); playerBody.position.set(0, 10, 0); world.addBody(playerBody);
         }
         
-        // --- 控制 & 逻辑 ---
+        // --- 🎮 核心控制逻辑升级 ---
         function updatePlayer(dt) {
             const s = vehicleSettings[currentVehicle];
             const maxSpeed = touchState.isSprinting ? s.speed * 2 : s.speed;
             const input = touchState.moveVector;
-            
-            // 脚步声逻辑
             const isMoving = Math.abs(input.x) > 0.1 || Math.abs(input.y) > 0.1;
+
             if (isMoving && currentVehicle === 'walk') {
                 sfx.playFootstep(touchState.isSprinting ? 0.3 : 0.5);
             }
@@ -733,17 +711,25 @@
                 const currentSpeed = input.length() * maxSpeed;
                 
                 if (s.fly) {
-                    playerBody.velocity.x = Math.cos(moveAngle) * currentSpeed; playerBody.velocity.z = Math.sin(moveAngle) * currentSpeed;
-                    const vert = touchState.isSprinting ? 10 : (Math.abs(input.length())<0.2 ? -5 : 0);
-                    playerBody.velocity.y = THREE.MathUtils.lerp(playerBody.velocity.y, vert, 0.1);
+                    playerBody.velocity.x = Math.cos(moveAngle) * currentSpeed; 
+                    playerBody.velocity.z = Math.sin(moveAngle) * currentSpeed;
+                    const vert = touchState.isSprinting ? 15 : (Math.abs(input.length())<0.2 ? -5 : 0);
+                    playerBody.velocity.y = THREE.MathUtils.lerp(playerBody.velocity.y, vert, 0.05);
                 } else {
-                    playerBody.velocity.x = Math.cos(moveAngle) * currentSpeed; playerBody.velocity.z = Math.sin(moveAngle) * currentSpeed;
+                    playerBody.velocity.x = Math.cos(moveAngle) * currentSpeed; 
+                    playerBody.velocity.z = Math.sin(moveAngle) * currentSpeed;
                 }
             } else {
                 playerBody.velocity.x *= (1 - s.damping); playerBody.velocity.z *= (1 - s.damping);
-                if(s.fly) playerBody.velocity.y *= 0.9;
+                if(s.fly) playerBody.velocity.y *= 0.95; 
             }
-            yawObject.position.copy(playerBody.position); yawObject.position.y += (s.fly ? 0 : s.height);
+            
+            // 视角平滑过渡
+            const targetY = s.fly ? playerBody.position.y : playerBody.position.y + s.height;
+            yawObject.position.x = playerBody.position.x;
+            yawObject.position.z = playerBody.position.z;
+            yawObject.position.y = THREE.MathUtils.lerp(yawObject.position.y, targetY, 0.1);
+
             ui.speed.innerText = Math.round(Math.sqrt(playerBody.velocity.x**2 + playerBody.velocity.z**2));
             checkInteraction();
         }
@@ -751,7 +737,7 @@
         function setChatTarget(npc) {
             chatTarget = npc;
             if(npc) {
-                chatTargetTimer = 20; // 锁定20秒
+                chatTargetTimer = 20; 
                 ui.targetInd.style.display = 'block';
                 ui.targetId.innerText = npc.userData.id;
                 ui.input.placeholder = `与 市民 #${npc.userData.id} 交谈...`;
@@ -781,9 +767,27 @@
         }
 
         function switchVehicle(type) {
-            currentVehicle = type; const s = vehicleSettings[type];
-            ui.modeIcon.innerText = s.icon; ui.modeText.innerText = s.name;
-            playerBody.linearDamping = s.damping; if(type==='fly') playerBody.velocity.y = 20;
+            if(currentVehicle === type) return; // 已经在该模式
+            currentVehicle = type; 
+            const s = vehicleSettings[type];
+            ui.modeIcon.innerText = s.icon; 
+            ui.modeText.innerText = s.name;
+            playerBody.linearDamping = s.damping; 
+            
+            // 按钮状态显隐
+            ui.btnWalk.style.display = (type === 'walk') ? 'none' : 'flex';
+            
+            // 模式切换特效
+            if(type === 'fly') {
+                playerBody.velocity.y = 50; // 起飞推力
+                sfx.playRocketLaunch();
+                aiSpeak("垂直推进器启动。");
+            } else if (type === 'car') {
+                sfx.playEngineStart();
+                aiSpeak("赛车模式已激活。");
+            } else {
+                aiSpeak("切换至步行模式。");
+            }
         }
 
         function setupControls() {
@@ -827,10 +831,11 @@
             }, {passive:false});
             document.addEventListener('touchend', e=>{ for(let t of e.changedTouches) if(t.identifier===camId) camId=null; });
 
-            document.getElementById('btn-jump').addEventListener('touchstart', e=>{ e.preventDefault(); playerBody.velocity.y = 10; });
-            document.getElementById('btn-car').addEventListener('touchstart', e=>{ e.preventDefault(); switchVehicle(currentVehicle==='walk'?'car':(currentVehicle==='car'?'plane':'walk')); });
+            // 绑定新按钮
+            ui.btnCar.addEventListener('touchstart', e=>{ e.preventDefault(); switchVehicle('car'); });
+            ui.btnFly.addEventListener('touchstart', e=>{ e.preventDefault(); switchVehicle('plane'); });
+            ui.btnWalk.addEventListener('touchstart', e=>{ e.preventDefault(); switchVehicle('walk'); });
             
-            // 交互按钮：现在会锁定目标
             document.getElementById('btn-interact').addEventListener('touchstart', e=>{ 
                 e.preventDefault(); sfx.playInteract();
                 if(window.currentInteractionTarget) {
@@ -842,7 +847,6 @@
             ui.input.addEventListener('keydown', e=>{ if(e.key==='Enter') { processCommand(ui.input.value); ui.input.value=''; } });
         }
 
-        // --- 环境 ---
         function updateEnvironment(dt) {
             dayTime=(dayTime+dt*0.001)%1; const phi=dayTime*Math.PI*2;
             sunLight.position.set(Math.sin(phi)*800, Math.cos(phi)*800, 200); sunMesh.position.copy(sunLight.position);
@@ -852,44 +856,112 @@
             buildingMaterials.forEach(m=>m.emissiveIntensity=THREE.MathUtils.lerp(m.emissiveIntensity, isNight?1:0, 0.05));
             ui.time.innerText = `${Math.floor(dayTime*24).toString().padStart(2,'0')}:${Math.floor((dayTime*24*60)%60).toString().padStart(2,'0')}`;
         }
-        function initNPCs(count) {
-            const bodyGeo=new THREE.BoxGeometry(0.6,1.2,0.4), headGeo=new THREE.BoxGeometry(0.4,0.4,0.4);
+
+        // --- 🚶 真实 NPC 系统 ---
+        function initRealNPCs(count) {
+            const colors = [0xAA3333, 0x33AA33, 0x3333AA, 0xAAAA33, 0x33AAAA, 0xAA33AA, 0xFFFFFF, 0x333333];
+            
             for(let i=0; i<count; i++) {
-                const g=new THREE.Group(), c=new THREE.Color().setHSL(Math.random(),0.8,0.5);
-                const b=new THREE.Mesh(bodyGeo,new THREE.MeshStandardMaterial({color:c})); b.position.y=0.6;
-                const h=new THREE.Mesh(headGeo,new THREE.MeshStandardMaterial({color:0xffccaa})); h.position.y=1.4;
-                g.add(b); g.add(h); 
-                g.position.set((Math.random()-0.5)*300,0,(Math.random()-0.5)*300); 
-                // 给NPC增加 ID
-                g.userData={isNPC:true, height:1.8, id: Math.floor(Math.random()*9000)+1000, lastTalkTime: 0};
-                scene.add(g); interactables.push(g); npcs.push({mesh:g, dir:Math.random()*6, speed:2+Math.random()*2, timer:0});
+                const group = new THREE.Group();
+                const skinColor = 0xffccaa;
+                const shirtColor = colors[Math.floor(Math.random()*colors.length)];
+                const pantsColor = 0x222222;
+
+                // 身体部位尺寸
+                const headGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+                const bodyGeo = new THREE.BoxGeometry(0.4, 0.5, 0.25);
+                const limbGeo = new THREE.BoxGeometry(0.12, 0.5, 0.12);
+
+                // 材质
+                const skinMat = new THREE.MeshStandardMaterial({color: skinColor});
+                const shirtMat = new THREE.MeshStandardMaterial({color: shirtColor});
+                const pantsMat = new THREE.MeshStandardMaterial({color: pantsColor});
+
+                // 构建
+                const head = new THREE.Mesh(headGeo, skinMat); head.position.y = 1.65;
+                const body = new THREE.Mesh(bodyGeo, shirtMat); body.position.y = 1.25;
+                
+                const armL = new THREE.Mesh(limbGeo, shirtMat); armL.position.set(-0.28, 1.25, 0); 
+                const armR = new THREE.Mesh(limbGeo, shirtMat); armR.position.set(0.28, 1.25, 0);
+                
+                const legL = new THREE.Mesh(limbGeo, pantsMat); legL.position.set(-0.12, 0.75, 0);
+                const legR = new THREE.Mesh(limbGeo, pantsMat); legR.position.set(0.12, 0.75, 0);
+
+                // 设置旋转中心点 (Pivot) 
+                // 为了简单起见，这里通过修改几何体中心或在动画中调整位置。
+                // 简单的动画逻辑：围绕父级中心旋转，这里我们让肢体Mesh的中心就在几何体中心，
+                // 所以我们需要在 update 中做一点位移补偿，或者直接旋转 Group。
+                
+                // 更好的方法：将 limb 放入一个 Pivot Group
+                function createLimb(mesh, yPivot) {
+                    const g = new THREE.Group(); g.position.set(mesh.position.x, mesh.position.y + yPivot, mesh.position.z);
+                    mesh.position.set(0, -yPivot, 0); // Offset mesh
+                    g.add(mesh);
+                    return g;
+                }
+
+                const gArmL = createLimb(armL, 0.2); // 0.2 是肩膀到手臂中心的距离估计
+                const gArmR = createLimb(armR, 0.2);
+                const gLegL = createLimb(legL, 0.25);
+                const gLegR = createLimb(legR, 0.25);
+
+                group.add(head); group.add(body);
+                group.add(gArmL); group.add(gArmR);
+                group.add(gLegL); group.add(gLegR);
+
+                group.position.set((Math.random()-0.5)*300, 0, (Math.random()-0.5)*300);
+                group.userData = { 
+                    isNPC: true, height: 1.8, id: Math.floor(Math.random()*9000)+1000, lastTalkTime: 0,
+                    limbs: { gArmL, gArmR, gLegL, gLegR }
+                };
+                
+                scene.add(group); 
+                interactables.push(group); 
+                npcs.push({ mesh: group, dir: Math.random()*6, speed: 1.5 + Math.random(), timer: 0 });
             }
         }
+
         function updateNPCs(dt) {
             const now = Date.now();
             npcs.forEach((n, idx) => {
-                n.timer+=dt; if(n.timer>3) { if(Math.random()>0.5) n.dir+=(Math.random()-0.5)*2; n.timer=0; }
-                n.mesh.position.x += Math.sin(n.dir)*n.speed*dt; n.mesh.position.z += Math.cos(n.dir)*n.speed*dt; n.mesh.rotation.y = n.dir;
+                // 移动逻辑
+                n.timer += dt; 
+                if(n.timer > 3) { if(Math.random()>0.5) n.dir += (Math.random()-0.5)*2; n.timer=0; }
+                
+                const dx = Math.sin(n.dir) * n.speed * dt;
+                const dz = Math.cos(n.dir) * n.speed * dt;
+                n.mesh.position.x += dx; 
+                n.mesh.position.z += dz; 
+                n.mesh.rotation.y = n.dir;
 
-                // --- 社交检测：NPC 之间互聊 ---
-                // 每隔一段时间检查一次，避免性能消耗
-                if (idx % 5 === 0 && now - n.mesh.userData.lastTalkTime > 8000) { // 至少间隔8秒
-                    // 寻找最近的另一个 NPC
+                // 地形高度匹配
+                const h = getTerrainHeight(n.mesh.position.x, n.mesh.position.z);
+                n.mesh.position.y = h;
+
+                // --- 🏃 动画系统 ---
+                // 简单的正弦波行走动画
+                const timeScale = now * 0.005 * n.speed;
+                const limbs = n.mesh.userData.limbs;
+                
+                limbs.gLegL.rotation.x = Math.sin(timeScale) * 0.6;
+                limbs.gLegR.rotation.x = Math.sin(timeScale + Math.PI) * 0.6;
+                limbs.gArmL.rotation.x = Math.sin(timeScale + Math.PI) * 0.6; // 手臂与对侧腿同步
+                limbs.gArmR.rotation.x = Math.sin(timeScale) * 0.6;
+
+                // --- 社交检测 ---
+                if (idx % 5 === 0 && now - n.mesh.userData.lastTalkTime > 8000) { 
                     for (let other of npcs) {
                         if (other === n) continue;
-                        if (n.mesh.position.distanceToSquared(other.mesh.position) < 25) { // 距离 < 5米
+                        if (n.mesh.position.distanceToSquared(other.mesh.position) < 25) { 
                              if (now - other.mesh.userData.lastTalkTime > 8000) {
-                                // 触发对话
                                 const talk = npcDialogues[Math.floor(Math.random() * npcDialogues.length)];
                                 npcSpeak(n.mesh, talk);
                                 n.mesh.userData.lastTalkTime = now;
-                                other.mesh.userData.lastTalkTime = now + 2000; // 对方稍微晚一点才能再说
-                                
-                                // 20% 概率 AI 插嘴评价
+                                other.mesh.userData.lastTalkTime = now + 2000; 
                                 if(Math.random() < 0.2 && aiDrone.mesh.position.distanceTo(n.mesh.position) < 30) {
                                     setTimeout(()=> aiSpeak(`检测到市民交流。话题分析：${["天气","经济","非法活动"][Math.floor(Math.random()*3)]}`), 2000);
                                 }
-                                break; // 只跟一个聊
+                                break; 
                              }
                         }
                     }
@@ -897,7 +969,6 @@
             });
         }
         
-        // --- 辅助 ---
         function addLog(txt, isUser) { const d=document.createElement('div'); d.style.color=isUser?'#fff':'#00f0ff'; d.textContent=(isUser?'> ':'> ECHO: ')+txt; ui.log.appendChild(d); ui.log.scrollTop=ui.log.scrollHeight; }
         function initVoice() { if('webkitSpeechRecognition' in window) { const r=new webkitSpeechRecognition(); r.lang='zh-CN'; const b=document.getElementById('mic-btn'); r.onstart=()=>b.classList.add('listening'); r.onend=()=>b.classList.remove('listening'); r.onresult=e=>processCommand(e.results[0][0].transcript); b.onclick=()=>r.start(); } }
 
